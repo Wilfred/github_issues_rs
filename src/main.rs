@@ -245,24 +245,34 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                 println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
                 
                 for issue in repo_issues {
-                    let mut prefix = format!("#{}", issue.number);
+                    // Build hyperlink for issue number using OSC 8
+                    let url = format!("https://github.com/{}/{}/issues/{}", repo.user, repo.name, issue.number);
+                    let issue_number_link = format!("\x1b]8;;{}\x1b\\#{}\x1b]8;;\x1b\\", url, issue.number);
+                    
+                    let mut metadata = String::new();
                     
                     if show_type {
                         let issue_type = if issue.is_pull_request { "PR" } else { "ISSUE" };
-                        prefix.push(' ');
-                        prefix.push_str(issue_type);
+                        if !metadata.is_empty() {
+                            metadata.push(' ');
+                        }
+                        metadata.push_str(issue_type);
                     }
                     
                     if show_state {
-                        prefix.push(' ');
-                        prefix.push_str(&issue.state.to_uppercase());
+                        if !metadata.is_empty() {
+                            metadata.push(' ');
+                        }
+                        metadata.push_str(&issue.state.to_uppercase());
                     }
                     
                     let date = issue.created_at.split('T').next().unwrap_or("");
-                    prefix.push(' ');
-                    prefix.push_str(date);
+                    if !metadata.is_empty() {
+                        metadata.push(' ');
+                    }
+                    metadata.push_str(date);
                     
-                    println!("{} {}", prefix.dimmed(), issue.title);
+                    println!("{} {} {}", issue_number_link, metadata.dimmed(), issue.title);
                 }
             }
         }
