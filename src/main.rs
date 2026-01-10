@@ -269,6 +269,8 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             break;
         }
         
+        let page_count = github_issues.len();
+        
         for gh_issue in github_issues {
             let new_issue = NewIssue {
                 repository_id: repository.id,
@@ -293,6 +295,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             count += 1;
         }
         
+        println!("  Page {}: {} issues (total: {}).", page, page_count, count);
         page += 1;
     }
     
