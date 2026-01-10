@@ -137,6 +137,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         .header("Accept", "application/vnd.github+json")
         .header("Authorization", format!("Bearer {}", token))
         .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "github_issues_rs")
         .send()
         .await?;
     
