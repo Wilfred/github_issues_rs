@@ -11,6 +11,7 @@ use serde::{Deserialize};
 use prettytable::{Table, row};
 use colored::Colorize;
 use pulldown_cmark::{Parser as MarkdownParser, html};
+use terminal_link::Link;
 
 const DB_PATH: &str = "sqlite://repositories.db";
 
@@ -184,7 +185,8 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         
         // Create hyperlinked title using OSC 8
         let url = format!("https://github.com/{}/{}/issues/{}", repository.user, repository.name, issue.number);
-        let title_link = format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", url, issue.title.bold());
+        let title_display = format!("{}", issue.title.bold());
+        let title_link = Link::new(&title_display, &url);
         println!("{}", title_link);
         println!();
         
@@ -258,7 +260,8 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                     // Build hyperlink for issue number using OSC 8 with padding
                     let url = format!("https://github.com/{}/{}/issues/{}", repo.user, repo.name, issue.number);
                     let padded_number = format!("{:>width$}", issue.number, width = max_number_width);
-                    let issue_number_link = format!("\x1b]8;;{}\x1b\\#{}\x1b]8;;\x1b\\", url, padded_number);
+                    let issue_number_display = format!("#{}", padded_number);
+                    let issue_number_link = Link::new(&issue_number_display, &url);
                     
                     let mut metadata = String::new();
                     
