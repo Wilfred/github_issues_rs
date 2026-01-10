@@ -29,6 +29,7 @@ pub struct Issue {
     pub body: String,
     pub created_at: String,
     pub state: String,
+    pub is_pull_request: bool,
 }
 
 #[derive(Insertable)]
@@ -40,4 +41,5 @@ pub struct NewIssue {
     pub body: String,
     pub created_at: String,
     pub state: String,
+    pub is_pull_request: bool,
 }

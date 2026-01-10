@@ -34,6 +34,16 @@ impl StateFilter {
     }
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+enum TypeFilter {
+    /// Show issues only
+    Issue,
+    /// Show pull requests only
+    Pr,
+    /// Show both issues and pull requests
+    All,
+}
+
 #[derive(Deserialize)]
 struct GitHubIssue {
     number: i32,
@@ -41,6 +51,7 @@ struct GitHubIssue {
     body: Option<String>,
     created_at: String,
     state: String,
+    pull_request: Option<serde_json::Value>,
 }
 
 #[derive(Parser)]
@@ -67,6 +78,9 @@ enum Commands {
         /// Filter by state: all, open, or closed
         #[arg(short, long, default_value = "open")]
         state: StateFilter,
+        /// Filter by type: all, issue, or pr
+        #[arg(short = 't', long, default_value = "issue")]
+        r#type: TypeFilter,
     },
 }
 
@@ -107,6 +121,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             body TEXT NOT NULL,
             created_at TEXT NOT NULL,
             state TEXT NOT NULL,
+            is_pull_request BOOLEAN NOT NULL DEFAULT 0,
             UNIQUE(repository_id, number)
         )",
     )
@@ -147,7 +162,7 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_issues(issue_number: Option<i32>, state_filter: StateFilter) -> Result<(), Box<dyn Error>> {
+fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter: TypeFilter) -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
     
     if let Some(number) = issue_number {
@@ -209,6 +224,13 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter) -> Result<(
             // Filter by state
             if state_filter.as_str() != "all" {
                 query = query.filter(schema::issues::state.eq(state_filter.as_str()));
+            }
+            
+            // Filter by type
+            match type_filter {
+                TypeFilter::Issue => query = query.filter(schema::issues::is_pull_request.eq(false)),
+                TypeFilter::Pr => query = query.filter(schema::issues::is_pull_request.eq(true)),
+                TypeFilter::All => {},
             }
             
             let repo_issues: Vec<Issue> = query
@@ -279,6 +301,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                 body: gh_issue.body.unwrap_or_default(),
                 created_at: gh_issue.created_at,
                 state: gh_issue.state,
+                is_pull_request: gh_issue.pull_request.is_some(),
             };
             
             diesel::insert_into(schema::issues::table)
@@ -355,8 +378,8 @@ fn main() {
                 }
             }
         },
-        Commands::Issue { number, state } => {
-            if let Err(e) = list_issues(number, state) {
+        Commands::Issue { number, state, r#type } => {
+            if let Err(e) = list_issues(number, state, r#type) {
                 eprintln!("{}: {}", "Error".red(), e);
             }
         }

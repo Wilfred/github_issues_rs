@@ -17,5 +17,6 @@ diesel::table! {
         body -> Text,
         created_at -> Text,
         state -> Text,
+        is_pull_request -> Bool,
     }
 }
