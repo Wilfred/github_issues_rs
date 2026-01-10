@@ -17,12 +17,12 @@ enum Commands {
     /// Add a new repository
     #[command(name = "add-repo")]
     AddRepo {
+        /// GitHub user or organization
+        #[arg(short, long)]
+        user: String,
         /// Repository name
         #[arg(short, long)]
         name: String,
-        /// Repository URL
-        #[arg(short, long)]
-        url: String,
     },
     /// List all repositories
     Repos,
@@ -30,37 +30,39 @@ enum Commands {
 
 fn init_db() -> SqlResult<Connection> {
     let conn = Connection::open(DB_PATH)?;
+    conn.execute_batch("DROP TABLE IF EXISTS repositories")?;
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS repositories (
+        "CREATE TABLE repositories (
             id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT NOT NULL
+            user TEXT NOT NULL,
+            name TEXT NOT NULL,
+            UNIQUE(user, name)
         )",
         [],
     )?;
     Ok(conn)
 }
 
-fn insert_repository(name: &str, url: &str) -> SqlResult<()> {
+fn insert_repository(user: &str, name: &str) -> SqlResult<()> {
     let conn = init_db()?;
     conn.execute(
-        "INSERT INTO repositories (name, url) VALUES (?1, ?2)",
-        [name, url],
+        "INSERT INTO repositories (user, name) VALUES (?1, ?2)",
+        [user, name],
     )?;
-    println!("Repository '{}' added successfully", name);
+    println!("Repository '{}/{}' added successfully", user, name);
     Ok(())
 }
 
 fn list_repositories() -> SqlResult<()> {
     let conn = init_db()?;
-    let mut stmt = conn.prepare("SELECT name, url FROM repositories ORDER BY name")?;
+    let mut stmt = conn.prepare("SELECT user, name FROM repositories ORDER BY user, name")?;
     let repos = stmt.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
 
     for repo in repos {
-        let (name, url) = repo?;
-        println!("{}: {}", name, url);
+        let (user, name) = repo?;
+        println!("{}/{}", user, name);
     }
     Ok(())
 }
@@ -72,8 +74,8 @@ fn main() {
         Commands::Sync => {
             println!("hello sync");
         }
-        Commands::AddRepo { name, url } => {
-            if let Err(e) = insert_repository(&name, &url) {
+        Commands::AddRepo { user, name } => {
+            if let Err(e) = insert_repository(&user, &name) {
                 eprintln!("Error adding repository: {}", e);
             }
         }
