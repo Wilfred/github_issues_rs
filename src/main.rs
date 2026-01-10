@@ -25,6 +25,8 @@ enum Commands {
         #[arg(short, long)]
         url: String,
     },
+    /// List all repositories
+    Repos,
 }
 
 fn init_db() -> SqlResult<Connection> {
@@ -50,6 +52,20 @@ fn insert_repository(name: &str, url: &str) -> SqlResult<()> {
     Ok(())
 }
 
+fn list_repositories() -> SqlResult<()> {
+    let conn = init_db()?;
+    let mut stmt = conn.prepare("SELECT name, url FROM repositories ORDER BY name")?;
+    let repos = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+
+    for repo in repos {
+        let (name, url) = repo?;
+        println!("{}: {}", name, url);
+    }
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -60,6 +76,11 @@ fn main() {
         Commands::AddRepo { name, url } => {
             if let Err(e) = insert_repository(&name, &url) {
                 eprintln!("Error adding repository: {}", e);
+            }
+        }
+        Commands::Repos => {
+            if let Err(e) = list_repositories() {
+                eprintln!("Error listing repositories: {}", e);
             }
         }
     }
