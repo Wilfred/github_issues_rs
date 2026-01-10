@@ -165,6 +165,10 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
 fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter: TypeFilter) -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
     
+    // Check if filters are non-default
+    let show_type = matches!(type_filter, TypeFilter::Pr | TypeFilter::All);
+    let show_state = matches!(state_filter, StateFilter::Closed | StateFilter::All);
+    
     if let Some(number) = issue_number {
         // Display specific issue
         let issue = schema::issues::table
@@ -240,15 +244,28 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
             if !repo_issues.is_empty() {
                 println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
                 
-                let mut table = Table::new();
-                table.add_row(row!["#", "Title", "Type", "State", "Created"]);
-                
                 for issue in repo_issues {
-                    let issue_type = if issue.is_pull_request { "PR" } else { "Issue" };
-                    table.add_row(row![issue.number, issue.title, issue_type, issue.state, issue.created_at]);
+                    let mut line = format!("#{}", issue.number);
+                    
+                    if show_type {
+                        let issue_type = if issue.is_pull_request { "PR" } else { "ISSUE" };
+                        line.push(' ');
+                        line.push_str(issue_type);
+                    }
+                    
+                    if show_state {
+                        line.push(' ');
+                        line.push_str(&issue.state.to_uppercase());
+                    }
+                    
+                    let date = issue.created_at.split('T').next().unwrap_or("");
+                    line.push(' ');
+                    line.push_str(date);
+                    line.push(' ');
+                    line.push_str(&issue.title);
+                    
+                    println!("{}", line);
                 }
-                
-                table.printstd();
             }
         }
     }
