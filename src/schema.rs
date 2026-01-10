@@ -7,3 +7,11 @@ diesel::table! {
         name -> Text,
     }
 }
+
+diesel::table! {
+    issues (id) {
+        id -> Integer,
+        title -> Text,
+        body -> Text,
+    }
+}

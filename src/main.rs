@@ -46,7 +46,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     let conn = SqliteConnection::establish(DB_PATH)
         .map_err(|e| format!("Error connecting to {}: {}", DB_PATH, e))?;
     
-    // Create table if it doesn't exist
+    // Create repositories table if it doesn't exist
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS repositories (
             id INTEGER PRIMARY KEY,
@@ -56,7 +56,18 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
         )",
     )
     .execute(&mut SqliteConnection::establish(DB_PATH)?)
-    .map_err(|e| format!("Error creating table: {}", e))?;
+    .map_err(|e| format!("Error creating repositories table: {}", e))?;
+    
+    // Create issues table if it doesn't exist
+    diesel::sql_query(
+        "CREATE TABLE IF NOT EXISTS issues (
+            id INTEGER PRIMARY KEY,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL
+        )",
+    )
+    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .map_err(|e| format!("Error creating issues table: {}", e))?;
     
     Ok(conn)
 }
