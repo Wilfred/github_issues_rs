@@ -25,15 +25,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Sync issues from a GitHub repository
-    Sync {
-        /// GitHub user or organization
-        #[arg(short, long)]
-        user: String,
-        /// Repository name
-        #[arg(short, long)]
-        name: String,
-    },
+    /// Sync issues from all repositories in the database
+    Sync,
     /// Repository management
     Repo {
         #[command(subcommand)]
@@ -132,12 +125,7 @@ fn list_issues() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[tokio::main]
-async fn sync_issues(user: &str, repo: &str) -> Result<(), Box<dyn Error>> {
-    dotenv::dotenv().ok();
-    let token = std::env::var("GITHUB_TOKEN")
-        .map_err(|_| "GITHUB_TOKEN not found in .env file")?;
-    
+async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(), Box<dyn Error>> {
     let url = format!(
         "https://api.github.com/repos/{}/{}/issues?per_page=100",
         user, repo
@@ -171,12 +159,38 @@ async fn sync_issues(user: &str, repo: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[tokio::main]
+async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
+    dotenv::dotenv().ok();
+    let token = std::env::var("GITHUB_TOKEN")
+        .map_err(|_| "GITHUB_TOKEN not found in .env file")?;
+    
+    let mut conn = establish_connection()?;
+    
+    let repos: Vec<Repository> = schema::repositories::table
+        .load::<Repository>(&mut conn)
+        .map_err(|e| format!("Error loading repositories: {}", e))?;
+    
+    if repos.is_empty() {
+        println!("No repositories to sync. Add repositories with: repo add --user <user> --name <name>");
+        return Ok(());
+    }
+    
+    for repo in repos {
+        if let Err(e) = sync_issues_for_repo(&repo.user, &repo.name, &token).await {
+            eprintln!("Error syncing {}/{}: {}", repo.user, repo.name, e);
+        }
+    }
+    
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Sync { user, name } => {
-            if let Err(e) = sync_issues(&user, &name) {
+        Commands::Sync => {
+            if let Err(e) = sync_all_repos() {
                 eprintln!("Error syncing issues: {}", e);
             }
         }

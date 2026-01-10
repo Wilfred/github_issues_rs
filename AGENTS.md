@@ -25,8 +25,11 @@ cargo run -- repo add --user torvalds --name linux
 # List all repositories
 cargo run -- repo list
 
-# Sync (placeholder)
+# Sync issues from all repositories
 cargo run -- sync
+
+# List all issues
+cargo run -- issues
 ```
 
 ## Code Structure
