@@ -202,25 +202,7 @@ fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
 }
 
 async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(), Box<dyn Error>> {
-    let url = format!(
-        "https://api.github.com/repos/{}/{}/issues?per_page=100",
-        user, repo
-    );
-    
     let client = reqwest::Client::new();
-    let response = client
-        .get(&url)
-        .header("Accept", "application/vnd.github+json")
-        .header("Authorization", format!("Bearer {}", token))
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .header("User-Agent", "github_issues_rs")
-        .send()
-        .await?;
-    
-    let body = response.text().await?;
-    let github_issues: Vec<GitHubIssue> = serde_json::from_str(&body)
-        .map_err(|e| format!("Error decoding response: {}. Response body: {}", e, body))?;
-    
     let mut conn = establish_connection()?;
     
     // Get repository ID
@@ -231,29 +213,56 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         .map_err(|e| format!("Repository {}/{} not found: {}", user, repo, e))?;
     
     let mut count = 0;
+    let mut page = 1;
     
-    for gh_issue in github_issues {
-        let new_issue = NewIssue {
-            repository_id: repository.id,
-            number: gh_issue.number,
-            title: gh_issue.title,
-            body: gh_issue.body.unwrap_or_default(),
-            created_at: gh_issue.created_at,
-            state: gh_issue.state,
-        };
+    loop {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/issues?per_page=100&page={}",
+            user, repo, page
+        );
         
-        diesel::insert_into(schema::issues::table)
-            .values(&new_issue)
-            .on_conflict((schema::issues::repository_id, schema::issues::number))
-            .do_update()
-            .set((
-                schema::issues::title.eq(excluded(schema::issues::title)),
-                schema::issues::body.eq(excluded(schema::issues::body)),
-                schema::issues::state.eq(excluded(schema::issues::state)),
-            ))
-            .execute(&mut conn)
-            .map_err(|e| format!("Error syncing issue: {}", e))?;
-        count += 1;
+        let response = client
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "github_issues_rs")
+            .send()
+            .await?;
+        
+        let body = response.text().await?;
+        let github_issues: Vec<GitHubIssue> = serde_json::from_str(&body)
+            .map_err(|e| format!("Error decoding response: {}. Response body: {}", e, body))?;
+        
+        if github_issues.is_empty() {
+            break;
+        }
+        
+        for gh_issue in github_issues {
+            let new_issue = NewIssue {
+                repository_id: repository.id,
+                number: gh_issue.number,
+                title: gh_issue.title,
+                body: gh_issue.body.unwrap_or_default(),
+                created_at: gh_issue.created_at,
+                state: gh_issue.state,
+            };
+            
+            diesel::insert_into(schema::issues::table)
+                .values(&new_issue)
+                .on_conflict((schema::issues::repository_id, schema::issues::number))
+                .do_update()
+                .set((
+                    schema::issues::title.eq(excluded(schema::issues::title)),
+                    schema::issues::body.eq(excluded(schema::issues::body)),
+                    schema::issues::state.eq(excluded(schema::issues::state)),
+                ))
+                .execute(&mut conn)
+                .map_err(|e| format!("Error syncing issue: {}", e))?;
+            count += 1;
+        }
+        
+        page += 1;
     }
     
     println!("Successfully synced {} issues from {}.", count, format!("{}/{}", user, repo).cyan());
