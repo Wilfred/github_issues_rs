@@ -50,10 +50,7 @@ cargo run -- issue 123
 
 ## Development
 
-### Build
-```bash
-cargo build
-```
+Never run a build, just use lint or test.
 
 ### Run
 ```bash
