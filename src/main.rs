@@ -1,7 +1,7 @@
 mod models;
 mod schema;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::upsert::excluded;
@@ -13,6 +13,26 @@ use colored::Colorize;
 use pulldown_cmark::{Parser as MarkdownParser, html};
 
 const DB_PATH: &str = "sqlite://repositories.db";
+
+#[derive(ValueEnum, Clone, Debug)]
+enum StateFilter {
+    /// Show open issues
+    Open,
+    /// Show closed issues
+    Closed,
+    /// Show all issues
+    All,
+}
+
+impl StateFilter {
+    fn as_str(&self) -> &str {
+        match self {
+            StateFilter::Open => "open",
+            StateFilter::Closed => "closed",
+            StateFilter::All => "all",
+        }
+    }
+}
 
 #[derive(Deserialize)]
 struct GitHubIssue {
@@ -46,7 +66,7 @@ enum Commands {
         number: Option<i32>,
         /// Filter by state: all, open, or closed
         #[arg(short, long, default_value = "open")]
-        state: String,
+        state: StateFilter,
     },
 }
 
@@ -127,7 +147,7 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_issues(issue_number: Option<i32>, state_filter: &str) -> Result<(), Box<dyn Error>> {
+fn list_issues(issue_number: Option<i32>, state_filter: StateFilter) -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
     
     if let Some(number) = issue_number {
@@ -187,8 +207,8 @@ fn list_issues(issue_number: Option<i32>, state_filter: &str) -> Result<(), Box<
                 .into_boxed();
             
             // Filter by state
-            if state_filter != "all" {
-                query = query.filter(schema::issues::state.eq(state_filter));
+            if state_filter.as_str() != "all" {
+                query = query.filter(schema::issues::state.eq(state_filter.as_str()));
             }
             
             let repo_issues: Vec<Issue> = query
@@ -333,7 +353,7 @@ fn main() {
             }
         },
         Commands::Issue { number, state } => {
-            if let Err(e) = list_issues(number, &state) {
+            if let Err(e) = list_issues(number, state) {
                 eprintln!("{}: {}", "Error".red(), e);
             }
         }
