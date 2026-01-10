@@ -170,20 +170,33 @@ fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
         
         println!("{}", text);
     } else {
-        // List all issues
-        let issues: Vec<Issue> = schema::issues::table
-            .order_by(schema::issues::number.desc())
-            .load::<Issue>(&mut conn)
-            .map_err(|e| format!("Error loading issues: {}", e))?;
+        // List all issues grouped by repository
+        let repositories: Vec<Repository> = schema::repositories::table
+            .order_by(schema::repositories::user.asc())
+            .then_order_by(schema::repositories::name.asc())
+            .load::<Repository>(&mut conn)
+            .map_err(|e| format!("Error loading repositories: {}", e))?;
         
-        let mut table = Table::new();
-        table.add_row(row!["#", "Title", "State", "Created"]);
-        
-        for issue in issues {
-            table.add_row(row![issue.number, issue.title, issue.state, issue.created_at]);
+        for repo in repositories {
+            let repo_issues: Vec<Issue> = schema::issues::table
+                .filter(schema::issues::repository_id.eq(repo.id))
+                .order_by(schema::issues::number.desc())
+                .load::<Issue>(&mut conn)
+                .map_err(|e| format!("Error loading issues: {}", e))?;
+            
+            if !repo_issues.is_empty() {
+                println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
+                
+                let mut table = Table::new();
+                table.add_row(row!["#", "Title", "State", "Created"]);
+                
+                for issue in repo_issues {
+                    table.add_row(row![issue.number, issue.title, issue.state, issue.created_at]);
+                }
+                
+                table.printstd();
+            }
         }
-        
-        table.printstd();
     }
     Ok(())
 }
