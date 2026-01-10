@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-rusqlite = { version = "0.31", features = ["bundled"] }
+diesel = { version = "2.1", features = ["sqlite"] }
+
+[dev-dependencies]
 
