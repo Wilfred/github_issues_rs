@@ -4,6 +4,7 @@ mod schema;
 use clap::{Parser, Subcommand};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
+use diesel::upsert::excluded;
 use models::{NewRepository, Repository, Issue, NewIssue};
 use std::error::Error;
 use serde::{Deserialize};
@@ -169,8 +170,15 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         
         diesel::insert_into(schema::issues::table)
             .values(&new_issue)
+            .on_conflict(schema::issues::number)
+            .do_update()
+            .set((
+                schema::issues::title.eq(excluded(schema::issues::title)),
+                schema::issues::body.eq(excluded(schema::issues::body)),
+                schema::issues::state.eq(excluded(schema::issues::state)),
+            ))
             .execute(&mut conn)
-            .map_err(|e| format!("Error inserting issue: {}", e))?;
+            .map_err(|e| format!("Error syncing issue: {}", e))?;
         count += 1;
     }
     
