@@ -73,7 +73,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS issues (
             id INTEGER PRIMARY KEY,
-            number INTEGER NOT NULL,
+            number INTEGER NOT NULL UNIQUE,
             title TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TEXT NOT NULL,
