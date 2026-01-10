@@ -120,6 +120,7 @@ fn list_issues() -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
     
     let issues: Vec<Issue> = schema::issues::table
+        .order_by(schema::issues::number.desc())
         .load::<Issue>(&mut conn)
         .map_err(|e| format!("Error loading issues: {}", e))?;
     
