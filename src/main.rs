@@ -8,10 +8,10 @@ use diesel::upsert::excluded;
 use models::{NewRepository, Repository, Issue, NewIssue};
 use std::error::Error;
 use serde::{Deserialize};
-use prettytable::{Table, row};
+
 use colored::Colorize;
-use pulldown_cmark::{Parser as MarkdownParser, html};
 use terminal_link::Link;
+use termimad::MadSkin;
 
 const DB_PATH: &str = "sqlite://repositories.db";
 
@@ -190,32 +190,9 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         println!("{}", title_link);
         println!();
         
-        // Render markdown body as plain text
-        let parser = MarkdownParser::new(&issue.body);
-        let mut html_output = String::new();
-        html::push_html(&mut html_output, parser);
-        
-        // Simple text rendering - strip HTML tags and display
-        let text = html_output
-            .replace("<p>", "")
-            .replace("</p>", "\n")
-            .replace("<li>", "• ")
-            .replace("</li>", "")
-            .replace("<ul>", "")
-            .replace("</ul>", "")
-            .replace("<ol>", "")
-            .replace("</ol>", "")
-            .replace("<strong>", "")
-            .replace("</strong>", "")
-            .replace("<em>", "")
-            .replace("</em>", "")
-            .replace("<code>", "")
-            .replace("</code>", "")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&amp;", "&");
-        
-        println!("{}", text);
+        // Render markdown body with termimad
+        let skin = MadSkin::default();
+        skin.print_text(&issue.body);
     } else {
         // List all issues grouped by repository
         let repositories: Vec<Repository> = schema::repositories::table
