@@ -11,6 +11,7 @@ diesel::table! {
 diesel::table! {
     issues (id) {
         id -> Integer,
+        repository_id -> Integer,
         number -> Integer,
         title -> Text,
         body -> Text,

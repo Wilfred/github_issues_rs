@@ -78,11 +78,13 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS issues (
             id INTEGER PRIMARY KEY,
-            number INTEGER NOT NULL UNIQUE,
+            repository_id INTEGER NOT NULL,
+            number INTEGER NOT NULL,
             title TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            state TEXT NOT NULL
+            state TEXT NOT NULL,
+            UNIQUE(repository_id, number)
         )",
     )
     .execute(&mut SqliteConnection::establish(DB_PATH)?)
@@ -132,7 +134,14 @@ fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
             .first::<Issue>(&mut conn)
             .map_err(|e| format!("Issue #{} not found: {}", number, e))?;
         
+        // Get repository info
+        let repository = schema::repositories::table
+            .find(issue.repository_id)
+            .first::<Repository>(&mut conn)
+            .map_err(|e| format!("Repository not found: {}", e))?;
+        
         println!("{}", issue.title.bold());
+        println!("{}", format!("https://github.com/{}/{}/issues/{}", repository.user, repository.name, issue.number).cyan());
         println!();
         
         // Render markdown body as plain text
@@ -201,10 +210,19 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         .map_err(|e| format!("Error decoding response: {}. Response body: {}", e, body))?;
     
     let mut conn = establish_connection()?;
+    
+    // Get repository ID
+    let repository: Repository = schema::repositories::table
+        .filter(schema::repositories::user.eq(user))
+        .filter(schema::repositories::name.eq(repo))
+        .first::<Repository>(&mut conn)
+        .map_err(|e| format!("Repository {}/{} not found: {}", user, repo, e))?;
+    
     let mut count = 0;
     
     for gh_issue in github_issues {
         let new_issue = NewIssue {
+            repository_id: repository.id,
             number: gh_issue.number,
             title: gh_issue.title,
             body: gh_issue.body.unwrap_or_default(),
@@ -214,7 +232,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         
         diesel::insert_into(schema::issues::table)
             .values(&new_issue)
-            .on_conflict(schema::issues::number)
+            .on_conflict((schema::issues::repository_id, schema::issues::number))
             .do_update()
             .set((
                 schema::issues::title.eq(excluded(schema::issues::title)),

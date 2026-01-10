@@ -22,6 +22,7 @@ pub struct NewRepository {
 pub struct Issue {
     #[allow(dead_code)]
     pub id: i32,
+    pub repository_id: i32,
     pub number: i32,
     pub title: String,
     #[allow(dead_code)]
@@ -33,6 +34,7 @@ pub struct Issue {
 #[derive(Insertable)]
 #[diesel(table_name = issues)]
 pub struct NewIssue {
+    pub repository_id: i32,
     pub number: i32,
     pub title: String,
     pub body: String,
