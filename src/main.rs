@@ -366,10 +366,8 @@ fn main() {
                 let parts: Vec<&str> = repo.split('/').collect();
                 if parts.len() != 2 {
                     eprintln!("{}: Repository must be in format {}.", "Error".red(), "username/projectname".yellow());
-                } else {
-                    if let Err(e) = insert_repository(parts[0], parts[1]) {
-                        eprintln!("{}: {}", "Error".red(), e);
-                    }
+                } else if let Err(e) = insert_repository(parts[0], parts[1]) {
+                    eprintln!("{}: {}", "Error".red(), e);
                 }
             }
             RepoCommands::List => {
