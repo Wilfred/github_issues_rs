@@ -189,7 +189,7 @@ async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
         .map_err(|e| format!("Error loading repositories: {}", e))?;
     
     if repos.is_empty() {
-        println!("No repositories to sync. Add repositories with: repo add --user <user> --name <name>");
+        println!("No repositories to sync. Add repositories with: cargo run -- repo add username/projectname");
         return Ok(());
     }
     
