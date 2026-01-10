@@ -30,9 +30,8 @@ enum Commands {
 
 fn init_db() -> SqlResult<Connection> {
     let conn = Connection::open(DB_PATH)?;
-    conn.execute_batch("DROP TABLE IF EXISTS repositories")?;
     conn.execute(
-        "CREATE TABLE repositories (
+        "CREATE TABLE IF NOT EXISTS repositories (
             id INTEGER PRIMARY KEY,
             user TEXT NOT NULL,
             name TEXT NOT NULL,
