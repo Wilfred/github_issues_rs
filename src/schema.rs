@@ -11,7 +11,9 @@ diesel::table! {
 diesel::table! {
     issues (id) {
         id -> Integer,
+        number -> Integer,
         title -> Text,
         body -> Text,
+        created_at -> Text,
     }
 }

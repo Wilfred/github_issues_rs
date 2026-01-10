@@ -22,13 +22,18 @@ pub struct NewRepository {
 pub struct Issue {
     #[allow(dead_code)]
     pub id: i32,
+    pub number: i32,
     pub title: String,
+    #[allow(dead_code)]
     pub body: String,
+    pub created_at: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = issues)]
 pub struct NewIssue {
+    pub number: i32,
     pub title: String,
     pub body: String,
+    pub created_at: String,
 }

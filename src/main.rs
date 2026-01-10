@@ -7,13 +7,16 @@ use diesel::sqlite::SqliteConnection;
 use models::{NewRepository, Repository, Issue, NewIssue};
 use std::error::Error;
 use serde::{Deserialize};
+use prettytable::{Table, row};
 
 const DB_PATH: &str = "sqlite://repositories.db";
 
 #[derive(Deserialize)]
 struct GitHubIssue {
+    number: i32,
     title: String,
     body: Option<String>,
+    created_at: String,
 }
 
 #[derive(Parser)]
@@ -71,8 +74,10 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS issues (
             id INTEGER PRIMARY KEY,
+            number INTEGER NOT NULL,
             title TEXT NOT NULL,
-            body TEXT NOT NULL
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL
         )",
     )
     .execute(&mut SqliteConnection::establish(DB_PATH)?)
@@ -119,9 +124,14 @@ fn list_issues() -> Result<(), Box<dyn Error>> {
         .load::<Issue>(&mut conn)
         .map_err(|e| format!("Error loading issues: {}", e))?;
     
+    let mut table = Table::new();
+    table.add_row(row!["#", "Title", "Created"]);
+    
     for issue in issues {
-        println!("{}: {}", issue.title, issue.body);
+        table.add_row(row![issue.number, issue.title, issue.created_at]);
     }
+    
+    table.printstd();
     Ok(())
 }
 
@@ -150,8 +160,10 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
     
     for gh_issue in github_issues {
         let new_issue = NewIssue {
+            number: gh_issue.number,
             title: gh_issue.title,
             body: gh_issue.body.unwrap_or_default(),
+            created_at: gh_issue.created_at,
         };
         
         diesel::insert_into(schema::issues::table)
