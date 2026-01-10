@@ -146,6 +146,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         .map_err(|e| format!("Error decoding response: {}. Response body: {}", e, body))?;
     
     let mut conn = establish_connection()?;
+    let mut count = 0;
     
     for gh_issue in github_issues {
         let new_issue = NewIssue {
@@ -157,9 +158,10 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             .values(&new_issue)
             .execute(&mut conn)
             .map_err(|e| format!("Error inserting issue: {}", e))?;
+        count += 1;
     }
     
-    println!("Successfully synced issues from {}/{}", user, repo);
+    println!("Successfully synced {} issues from {}/{}", count, user, repo);
     Ok(())
 }
 
