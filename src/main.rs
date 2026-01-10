@@ -8,6 +8,7 @@ use models::{NewRepository, Repository, Issue, NewIssue};
 use std::error::Error;
 use serde::{Deserialize};
 use prettytable::{Table, row};
+use colored::Colorize;
 
 const DB_PATH: &str = "sqlite://repositories.db";
 
@@ -96,7 +97,7 @@ fn insert_repository(user: &str, name: &str) -> Result<(), Box<dyn Error>> {
         .execute(&mut conn)
         .map_err(|e| format!("Error inserting repository: {}", e))?;
     
-    println!("Repository '{}/{}' added successfully", user, name);
+    println!("{}", format!("Repository '{}/{}' added successfully.", user, name).green());
     Ok(())
 }
 
@@ -172,7 +173,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         count += 1;
     }
     
-    println!("Successfully synced {} issues from {}/{}", count, user, repo);
+    println!("{}", format!("Successfully synced {} issues from {}/{}.", count, user, repo).green());
     Ok(())
 }
 
@@ -189,7 +190,7 @@ async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
         .map_err(|e| format!("Error loading repositories: {}", e))?;
     
     if repos.is_empty() {
-        println!("No repositories to sync. Add repositories with: cargo run -- repo add username/projectname");
+        println!("{}", "No repositories to sync. Add repositories with: cargo run -- repo add username/projectname.".yellow());
         return Ok(());
     }
     
@@ -208,29 +209,29 @@ fn main() {
     match cli.command {
         Commands::Sync => {
             if let Err(e) = sync_all_repos() {
-                eprintln!("Error syncing issues: {}", e);
+                eprintln!("{}", format!("Error syncing issues: {}", e).red());
             }
         }
         Commands::Repo { command } => match command {
             RepoCommands::Add { repo } => {
                 let parts: Vec<&str> = repo.split('/').collect();
                 if parts.len() != 2 {
-                    eprintln!("Error: Repository must be in format username/projectname");
+                    eprintln!("{}", "Error: Repository must be in format username/projectname.".red());
                 } else {
                     if let Err(e) = insert_repository(parts[0], parts[1]) {
-                        eprintln!("Error adding repository: {}", e);
+                        eprintln!("{}", format!("Error adding repository: {}", e).red());
                     }
                 }
             }
             RepoCommands::List => {
                 if let Err(e) = list_repositories() {
-                    eprintln!("Error listing repositories: {}", e);
+                    eprintln!("{}", format!("Error listing repositories: {}", e).red());
                 }
             }
         },
         Commands::Issues => {
             if let Err(e) = list_issues() {
-                eprintln!("Error listing issues: {}", e);
+                eprintln!("{}", format!("Error listing issues: {}", e).red());
             }
         }
     }
