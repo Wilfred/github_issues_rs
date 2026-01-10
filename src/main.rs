@@ -20,9 +20,17 @@ struct Cli {
 enum Commands {
     /// Sync command
     Sync,
+    /// Repository management
+    Repo {
+        #[command(subcommand)]
+        command: RepoCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum RepoCommands {
     /// Add a new repository
-    #[command(name = "add-repo")]
-    AddRepo {
+    Add {
         /// GitHub user or organization
         #[arg(short, long)]
         user: String,
@@ -31,7 +39,7 @@ enum Commands {
         name: String,
     },
     /// List all repositories
-    Repos,
+    List,
 }
 
 fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
@@ -91,15 +99,17 @@ fn main() {
         Commands::Sync => {
             println!("hello sync");
         }
-        Commands::AddRepo { user, name } => {
-            if let Err(e) = insert_repository(&user, &name) {
-                eprintln!("Error adding repository: {}", e);
+        Commands::Repo { command } => match command {
+            RepoCommands::Add { user, name } => {
+                if let Err(e) = insert_repository(&user, &name) {
+                    eprintln!("Error adding repository: {}", e);
+                }
             }
-        }
-        Commands::Repos => {
-            if let Err(e) = list_repositories() {
-                eprintln!("Error listing repositories: {}", e);
+            RepoCommands::List => {
+                if let Err(e) = list_repositories() {
+                    eprintln!("Error listing repositories: {}", e);
+                }
             }
-        }
+        },
     }
 }
