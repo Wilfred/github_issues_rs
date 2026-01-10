@@ -132,7 +132,6 @@ fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
             .first::<Issue>(&mut conn)
             .map_err(|e| format!("Issue #{} not found: {}", number, e))?;
         
-        println!("{} {}", "#".cyan().bold(), issue.number);
         println!("{}", issue.title.bold());
         println!();
         
