@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, Result as SqlResult};
-use std::path::Path;
 
 const DB_PATH: &str = "repositories.db";
 
