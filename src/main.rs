@@ -98,7 +98,7 @@ fn insert_repository(user: &str, name: &str) -> Result<(), Box<dyn Error>> {
         .execute(&mut conn)
         .map_err(|e| format!("Error inserting repository: {}", e))?;
     
-    println!("{}", format!("Repository '{}/{}' added successfully.", user, name).green());
+    println!("Repository '{}' added successfully.", format!("{}/{}", user, name).cyan());
     Ok(())
 }
 
@@ -182,7 +182,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         count += 1;
     }
     
-    println!("{}", format!("Successfully synced {} issues from {}/{}.", count, user, repo).green());
+    println!("Successfully synced {} issues from {}.", count, format!("{}/{}", user, repo).cyan());
     Ok(())
 }
 
@@ -199,7 +199,7 @@ async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
         .map_err(|e| format!("Error loading repositories: {}", e))?;
     
     if repos.is_empty() {
-        println!("{}", "No repositories to sync. Add repositories with: cargo run -- repo add username/projectname.".yellow());
+        println!("No repositories to sync. Add repositories with: {}.", "cargo run -- repo add username/projectname".yellow());
         return Ok(());
     }
     
@@ -218,29 +218,29 @@ fn main() {
     match cli.command {
         Commands::Sync => {
             if let Err(e) = sync_all_repos() {
-                eprintln!("{}", format!("Error syncing issues: {}", e).red());
+                eprintln!("{}: {}", "Error".red(), e);
             }
         }
         Commands::Repo { command } => match command {
             RepoCommands::Add { repo } => {
                 let parts: Vec<&str> = repo.split('/').collect();
                 if parts.len() != 2 {
-                    eprintln!("{}", "Error: Repository must be in format username/projectname.".red());
+                    eprintln!("{}: Repository must be in format {}.", "Error".red(), "username/projectname".yellow());
                 } else {
                     if let Err(e) = insert_repository(parts[0], parts[1]) {
-                        eprintln!("{}", format!("Error adding repository: {}", e).red());
+                        eprintln!("{}: {}", "Error".red(), e);
                     }
                 }
             }
             RepoCommands::List => {
                 if let Err(e) = list_repositories() {
-                    eprintln!("{}", format!("Error listing repositories: {}", e).red());
+                    eprintln!("{}: {}", "Error".red(), e);
                 }
             }
         },
         Commands::Issue => {
             if let Err(e) = list_issues() {
-                eprintln!("{}", format!("Error listing issues: {}", e).red());
+                eprintln!("{}: {}", "Error".red(), e);
             }
         }
     }
