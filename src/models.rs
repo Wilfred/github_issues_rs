@@ -29,7 +29,6 @@ pub struct Issue {
     pub body: String,
     pub created_at: String,
     pub state: String,
-    #[allow(dead_code)]
     pub is_pull_request: bool,
 }
 

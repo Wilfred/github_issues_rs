@@ -241,10 +241,11 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                 println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
                 
                 let mut table = Table::new();
-                table.add_row(row!["#", "Title", "State", "Created"]);
+                table.add_row(row!["#", "Title", "Type", "State", "Created"]);
                 
                 for issue in repo_issues {
-                    table.add_row(row![issue.number, issue.title, issue.state, issue.created_at]);
+                    let issue_type = if issue.is_pull_request { "PR" } else { "Issue" };
+                    table.add_row(row![issue.number, issue.title, issue_type, issue.state, issue.created_at]);
                 }
                 
                 table.printstd();
