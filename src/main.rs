@@ -4,7 +4,7 @@ mod schema;
 use clap::{Parser, Subcommand};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use models::{NewRepository, Repository};
+use models::{NewRepository, Repository, Issue};
 use std::error::Error;
 
 const DB_PATH: &str = "sqlite://repositories.db";
@@ -25,6 +25,8 @@ enum Commands {
         #[command(subcommand)]
         command: RepoCommands,
     },
+    /// List all issues
+    Issues,
 }
 
 #[derive(Subcommand)]
@@ -103,6 +105,19 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn list_issues() -> Result<(), Box<dyn Error>> {
+    let mut conn = establish_connection()?;
+    
+    let issues: Vec<Issue> = schema::issues::table
+        .load::<Issue>(&mut conn)
+        .map_err(|e| format!("Error loading issues: {}", e))?;
+    
+    for issue in issues {
+        println!("{}: {}", issue.title, issue.body);
+    }
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -122,5 +137,10 @@ fn main() {
                 }
             }
         },
+        Commands::Issues => {
+            if let Err(e) = list_issues() {
+                eprintln!("Error listing issues: {}", e);
+            }
+        }
     }
 }
