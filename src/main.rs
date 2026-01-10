@@ -44,12 +44,8 @@ enum Commands {
 enum RepoCommands {
     /// Add a new repository
     Add {
-        /// GitHub user or organization
-        #[arg(short, long)]
-        user: String,
-        /// Repository name
-        #[arg(short, long)]
-        name: String,
+        /// Repository in format username/projectname
+        repo: String,
     },
     /// List all repositories
     List,
@@ -216,9 +212,14 @@ fn main() {
             }
         }
         Commands::Repo { command } => match command {
-            RepoCommands::Add { user, name } => {
-                if let Err(e) = insert_repository(&user, &name) {
-                    eprintln!("Error adding repository: {}", e);
+            RepoCommands::Add { repo } => {
+                let parts: Vec<&str> = repo.split('/').collect();
+                if parts.len() != 2 {
+                    eprintln!("Error: Repository must be in format username/projectname");
+                } else {
+                    if let Err(e) = insert_repository(parts[0], parts[1]) {
+                        eprintln!("Error adding repository: {}", e);
+                    }
                 }
             }
             RepoCommands::List => {

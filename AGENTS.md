@@ -20,7 +20,7 @@ github_issues_rs
 
 ```bash
 # Add a repository
-cargo run -- repo add --user torvalds --name linux
+cargo run -- repo add torvalds/linux
 
 # List all repositories
 cargo run -- repo list
