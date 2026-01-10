@@ -10,6 +10,7 @@ use std::error::Error;
 use serde::{Deserialize};
 use prettytable::{Table, row};
 use colored::Colorize;
+use pulldown_cmark::{Parser as MarkdownParser, html};
 
 const DB_PATH: &str = "sqlite://repositories.db";
 
@@ -38,8 +39,12 @@ enum Commands {
         #[command(subcommand)]
         command: RepoCommands,
     },
-    /// List all issues
-    Issue,
+    /// List all issues, or view a specific issue
+    Issue {
+        /// Optional issue number to view details
+        #[arg(value_name = "NUMBER")]
+        number: Option<i32>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -117,22 +122,62 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_issues() -> Result<(), Box<dyn Error>> {
+fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
     
-    let issues: Vec<Issue> = schema::issues::table
-        .order_by(schema::issues::number.desc())
-        .load::<Issue>(&mut conn)
-        .map_err(|e| format!("Error loading issues: {}", e))?;
-    
-    let mut table = Table::new();
-    table.add_row(row!["#", "Title", "State", "Created"]);
-    
-    for issue in issues {
-        table.add_row(row![issue.number, issue.title, issue.state, issue.created_at]);
+    if let Some(number) = issue_number {
+        // Display specific issue
+        let issue = schema::issues::table
+            .filter(schema::issues::number.eq(number))
+            .first::<Issue>(&mut conn)
+            .map_err(|e| format!("Issue #{} not found: {}", number, e))?;
+        
+        println!("{} {}", "#".cyan().bold(), issue.number);
+        println!("{}", issue.title.bold());
+        println!();
+        
+        // Render markdown body as plain text
+        let parser = MarkdownParser::new(&issue.body);
+        let mut html_output = String::new();
+        html::push_html(&mut html_output, parser);
+        
+        // Simple text rendering - strip HTML tags and display
+        let text = html_output
+            .replace("<p>", "")
+            .replace("</p>", "\n")
+            .replace("<li>", "• ")
+            .replace("</li>", "")
+            .replace("<ul>", "")
+            .replace("</ul>", "")
+            .replace("<ol>", "")
+            .replace("</ol>", "")
+            .replace("<strong>", "")
+            .replace("</strong>", "")
+            .replace("<em>", "")
+            .replace("</em>", "")
+            .replace("<code>", "")
+            .replace("</code>", "")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&");
+        
+        println!("{}", text);
+    } else {
+        // List all issues
+        let issues: Vec<Issue> = schema::issues::table
+            .order_by(schema::issues::number.desc())
+            .load::<Issue>(&mut conn)
+            .map_err(|e| format!("Error loading issues: {}", e))?;
+        
+        let mut table = Table::new();
+        table.add_row(row!["#", "Title", "State", "Created"]);
+        
+        for issue in issues {
+            table.add_row(row![issue.number, issue.title, issue.state, issue.created_at]);
+        }
+        
+        table.printstd();
     }
-    
-    table.printstd();
     Ok(())
 }
 
@@ -238,8 +283,8 @@ fn main() {
                 }
             }
         },
-        Commands::Issue => {
-            if let Err(e) = list_issues() {
+        Commands::Issue { number } => {
+            if let Err(e) = list_issues(number) {
                 eprintln!("{}: {}", "Error".red(), e);
             }
         }

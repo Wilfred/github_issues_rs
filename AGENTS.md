@@ -31,6 +31,9 @@ cargo run -- sync
 
 # List all issues
 cargo run -- issue
+
+# View a specific issue
+cargo run -- issue 123
 ```
 
 ## Code Structure
