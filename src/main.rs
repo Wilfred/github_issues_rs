@@ -17,6 +17,7 @@ struct GitHubIssue {
     title: String,
     body: Option<String>,
     created_at: String,
+    state: String,
 }
 
 #[derive(Parser)]
@@ -77,7 +78,8 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             number INTEGER NOT NULL,
             title TEXT NOT NULL,
             body TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            state TEXT NOT NULL
         )",
     )
     .execute(&mut SqliteConnection::establish(DB_PATH)?)
@@ -125,10 +127,10 @@ fn list_issues() -> Result<(), Box<dyn Error>> {
         .map_err(|e| format!("Error loading issues: {}", e))?;
     
     let mut table = Table::new();
-    table.add_row(row!["#", "Title", "Created"]);
+    table.add_row(row!["#", "Title", "State", "Created"]);
     
     for issue in issues {
-        table.add_row(row![issue.number, issue.title, issue.created_at]);
+        table.add_row(row![issue.number, issue.title, issue.state, issue.created_at]);
     }
     
     table.printstd();
@@ -164,6 +166,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             title: gh_issue.title,
             body: gh_issue.body.unwrap_or_default(),
             created_at: gh_issue.created_at,
+            state: gh_issue.state,
         };
         
         diesel::insert_into(schema::issues::table)

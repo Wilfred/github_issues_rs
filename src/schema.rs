@@ -15,5 +15,6 @@ diesel::table! {
         title -> Text,
         body -> Text,
         created_at -> Text,
+        state -> Text,
     }
 }

@@ -27,6 +27,7 @@ pub struct Issue {
     #[allow(dead_code)]
     pub body: String,
     pub created_at: String,
+    pub state: String,
 }
 
 #[derive(Insertable)]
@@ -36,4 +37,5 @@ pub struct NewIssue {
     pub title: String,
     pub body: String,
     pub created_at: String,
+    pub state: String,
 }
