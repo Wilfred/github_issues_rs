@@ -245,26 +245,24 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                 println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
                 
                 for issue in repo_issues {
-                    let mut line = format!("#{}", issue.number);
+                    let mut prefix = format!("#{}", issue.number);
                     
                     if show_type {
                         let issue_type = if issue.is_pull_request { "PR" } else { "ISSUE" };
-                        line.push(' ');
-                        line.push_str(issue_type);
+                        prefix.push(' ');
+                        prefix.push_str(issue_type);
                     }
                     
                     if show_state {
-                        line.push(' ');
-                        line.push_str(&issue.state.to_uppercase());
+                        prefix.push(' ');
+                        prefix.push_str(&issue.state.to_uppercase());
                     }
                     
                     let date = issue.created_at.split('T').next().unwrap_or("");
-                    line.push(' ');
-                    line.push_str(date);
-                    line.push(' ');
-                    line.push_str(&issue.title);
+                    prefix.push(' ');
+                    prefix.push_str(date);
                     
-                    println!("{}", line);
+                    println!("{} {}", prefix.dimmed(), issue.title);
                 }
             }
         }
