@@ -248,7 +248,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
     
     loop {
         let url = format!(
-            "https://api.github.com/repos/{}/{}/issues?per_page=100&page={}",
+            "https://api.github.com/repos/{}/{}/issues?state=all&per_page=100&page={}",
             user, repo, page
         );
         
