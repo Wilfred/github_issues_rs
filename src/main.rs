@@ -182,7 +182,10 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
             .first::<Repository>(&mut conn)
             .map_err(|e| format!("Repository not found: {}", e))?;
         
-        println!("{} https://github.com/{}/{}/issues/{}", issue.title.bold(), repository.user, repository.name, issue.number);
+        // Create hyperlinked title using OSC 8
+        let url = format!("https://github.com/{}/{}/issues/{}", repository.user, repository.name, issue.number);
+        let title_link = format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", url, issue.title.bold());
+        println!("{}", title_link);
         println!();
         
         // Render markdown body as plain text
