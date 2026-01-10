@@ -244,10 +244,18 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
             if !repo_issues.is_empty() {
                 println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
                 
+                // Find the maximum issue number width for alignment
+                let max_number_width = repo_issues
+                    .iter()
+                    .map(|i| i.number.to_string().len())
+                    .max()
+                    .unwrap_or(1);
+                
                 for issue in repo_issues {
-                    // Build hyperlink for issue number using OSC 8
+                    // Build hyperlink for issue number using OSC 8 with padding
                     let url = format!("https://github.com/{}/{}/issues/{}", repo.user, repo.name, issue.number);
-                    let issue_number_link = format!("\x1b]8;;{}\x1b\\#{}\x1b]8;;\x1b\\", url, issue.number);
+                    let padded_number = format!("{:>width$}", issue.number, width = max_number_width);
+                    let issue_number_link = format!("\x1b]8;;{}\x1b\\#{}\x1b]8;;\x1b\\", url, padded_number);
                     
                     let mut metadata = String::new();
                     
@@ -272,7 +280,7 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                     }
                     metadata.push_str(date);
                     
-                    println!("{} {} {}", issue_number_link, metadata.dimmed(), issue.title);
+                    println!("{} {} {}", issue_number_link, metadata.dimmed(), issue.title.bold());
                 }
             }
         }
