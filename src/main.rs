@@ -38,7 +38,7 @@ enum Commands {
         command: RepoCommands,
     },
     /// List all issues
-    Issues,
+    Issue,
 }
 
 #[derive(Subcommand)]
@@ -229,7 +229,7 @@ fn main() {
                 }
             }
         },
-        Commands::Issues => {
+        Commands::Issue => {
             if let Err(e) = list_issues() {
                 eprintln!("{}", format!("Error listing issues: {}", e).red());
             }

@@ -14,7 +14,7 @@ github_issues_rs
 ├── repo          # Repository management
 │   ├── add       # Add a new repository
 │   └── list      # List all repositories
-└── issues        # List all issues
+└── issue         # List all issues
 ```
 
 ### Usage Examples
@@ -30,7 +30,7 @@ cargo run -- repo list
 cargo run -- sync
 
 # List all issues
-cargo run -- issues
+cargo run -- issue
 ```
 
 ## Code Structure
