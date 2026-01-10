@@ -44,6 +44,9 @@ enum Commands {
         /// Optional issue number to view details
         #[arg(value_name = "NUMBER")]
         number: Option<i32>,
+        /// Filter by state: all, open, or closed
+        #[arg(short, long, default_value = "open")]
+        state: String,
     },
 }
 
@@ -124,7 +127,7 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
+fn list_issues(issue_number: Option<i32>, state_filter: &str) -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
     
     if let Some(number) = issue_number {
@@ -178,9 +181,17 @@ fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
             .map_err(|e| format!("Error loading repositories: {}", e))?;
         
         for repo in repositories {
-            let repo_issues: Vec<Issue> = schema::issues::table
+            let mut query = schema::issues::table
                 .filter(schema::issues::repository_id.eq(repo.id))
                 .order_by(schema::issues::number.desc())
+                .into_boxed();
+            
+            // Filter by state
+            if state_filter != "all" {
+                query = query.filter(schema::issues::state.eq(state_filter));
+            }
+            
+            let repo_issues: Vec<Issue> = query
                 .load::<Issue>(&mut conn)
                 .map_err(|e| format!("Error loading issues: {}", e))?;
             
@@ -321,8 +332,8 @@ fn main() {
                 }
             }
         },
-        Commands::Issue { number } => {
-            if let Err(e) = list_issues(number) {
+        Commands::Issue { number, state } => {
+            if let Err(e) = list_issues(number, &state) {
                 eprintln!("{}: {}", "Error".red(), e);
             }
         }
