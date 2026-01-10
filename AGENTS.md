@@ -10,10 +10,11 @@ The CLI uses nested subcommands organized by domain:
 
 ```
 github_issues_rs
-├── sync          # Sync repositories with GitHub
-└── repo          # Repository management
-    ├── add       # Add a new repository
-    └── list      # List all repositories
+├── sync          # Sync issues from all repositories in database
+├── repo          # Repository management
+│   ├── add       # Add a new repository
+│   └── list      # List all repositories
+└── issues        # List all issues
 ```
 
 ### Usage Examples
