@@ -4,10 +4,17 @@ mod schema;
 use clap::{Parser, Subcommand};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use models::{NewRepository, Repository, Issue};
+use models::{NewRepository, Repository, Issue, NewIssue};
 use std::error::Error;
+use serde::{Deserialize};
 
 const DB_PATH: &str = "sqlite://repositories.db";
+
+#[derive(Deserialize)]
+struct GitHubIssue {
+    title: String,
+    body: Option<String>,
+}
 
 #[derive(Parser)]
 #[command(name = "github_issues_rs")]
@@ -18,8 +25,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Sync command
-    Sync,
+    /// Sync issues from a GitHub repository
+    Sync {
+        /// GitHub user or organization
+        #[arg(short, long)]
+        user: String,
+        /// Repository name
+        #[arg(short, long)]
+        name: String,
+    },
     /// Repository management
     Repo {
         #[command(subcommand)]
@@ -118,12 +132,53 @@ fn list_issues() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[tokio::main]
+async fn sync_issues(user: &str, repo: &str) -> Result<(), Box<dyn Error>> {
+    dotenv::dotenv().ok();
+    let token = std::env::var("GITHUB_TOKEN")
+        .map_err(|_| "GITHUB_TOKEN not found in .env file")?;
+    
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/issues?per_page=100",
+        user, repo
+    );
+    
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await?;
+    
+    let github_issues: Vec<GitHubIssue> = response.json().await?;
+    let mut conn = establish_connection()?;
+    
+    for gh_issue in github_issues {
+        let new_issue = NewIssue {
+            title: gh_issue.title,
+            body: gh_issue.body.unwrap_or_default(),
+        };
+        
+        diesel::insert_into(schema::issues::table)
+            .values(&new_issue)
+            .execute(&mut conn)
+            .map_err(|e| format!("Error inserting issue: {}", e))?;
+    }
+    
+    println!("Successfully synced issues from {}/{}", user, repo);
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Sync => {
-            println!("hello sync");
+        Commands::Sync { user, name } => {
+            if let Err(e) = sync_issues(&user, &name) {
+                eprintln!("Error syncing issues: {}", e);
+            }
         }
         Commands::Repo { command } => match command {
             RepoCommands::Add { user, name } => {
