@@ -140,8 +140,7 @@ fn list_issues(issue_number: Option<i32>) -> Result<(), Box<dyn Error>> {
             .first::<Repository>(&mut conn)
             .map_err(|e| format!("Repository not found: {}", e))?;
         
-        println!("{}", issue.title.bold());
-        println!("{}", format!("https://github.com/{}/{}/issues/{}", repository.user, repository.name, issue.number).cyan());
+        println!("{} https://github.com/{}/{}/issues/{}", issue.title.bold(), repository.user, repository.name, issue.number);
         println!();
         
         // Render markdown body as plain text
