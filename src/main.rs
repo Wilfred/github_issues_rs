@@ -275,11 +275,25 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         let title_link = Link::new(&title_display, &url);
         
         // Display title and author
+        let mut first_line = format!("{}", title_link);
+        
         if let Some(author) = &issue.author {
-            println!("{} {}", title_link, format!("by {}", author).dimmed());
-        } else {
-            println!("{}", title_link);
+            first_line.push_str(&format!(" {}", format!("by {}", author).dimmed()));
         }
+        
+        // Add state and type badges
+        let state_display = if issue.state == "open" {
+            issue.state.to_uppercase().green().to_string()
+        } else {
+            issue.state.to_uppercase().red().to_string()
+        };
+        first_line.push_str(&format!(" {}", state_display));
+        
+        if issue.is_pull_request {
+            first_line.push_str(&format!(" {}", "PULL REQUEST".cyan()));
+        }
+        
+        println!("{}", first_line);
         
         // Get and display reactions immediately after title
         let reactions: Vec<IssueReaction> = schema::issue_reactions::table
