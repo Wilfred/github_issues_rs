@@ -14,6 +14,7 @@ dotenv = "0.15"
 colored = "2.1"
 terminal-link = "0.1"
 termimad = "0.25"
+pager = "0.16"
 
 [dev-dependencies]
 

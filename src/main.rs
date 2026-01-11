@@ -12,6 +12,7 @@ use serde::{Deserialize};
 use colored::Colorize;
 use terminal_link::Link;
 use termimad::MadSkin;
+use pager::Pager;
 
 const DB_PATH: &str = "sqlite://repositories.db";
 
@@ -306,6 +307,9 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         let skin = MadSkin::default();
         skin.print_text(&issue.body);
     } else {
+        // Collect issue list output
+        let mut output = String::new();
+        
         // List all issues grouped by repository
         let repositories: Vec<Repository> = schema::repositories::table
             .order_by(schema::repositories::user.asc())
@@ -336,7 +340,8 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                 .map_err(|e| format!("Error loading issues: {}", e))?;
             
             if !repo_issues.is_empty() {
-                println!("\n{}", format!("{}/{}", repo.user, repo.name).cyan().bold());
+                output.push('\n');
+                output.push_str(&format!("{}/{}\n", repo.user, repo.name));
                 
                 // Find the maximum issue number width for alignment
                 let max_number_width = repo_issues
@@ -375,10 +380,14 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                     }
                     metadata.push_str(date);
                     
-                    println!("{} {} {}", issue_number_link, metadata.dimmed(), issue.title.bold());
+                    output.push_str(&format!("{} {} {}\n", issue_number_link, metadata.dimmed(), issue.title.bold()));
                 }
             }
         }
+        
+        // Use pager for output
+        Pager::new().setup();
+        print!("{}", output);
     }
     Ok(())
 }
