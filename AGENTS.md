@@ -62,6 +62,11 @@ cargo run -- <command>
 cargo clippy
 ```
 
+### Formatting
+```
+cargo fmt
+```
+
 ### Test (when added)
 ```bash
 cargo test
