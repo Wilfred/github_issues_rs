@@ -393,7 +393,11 @@ fn list_issues(
 
         // Render markdown body with termimad
         let skin = MadSkin::default();
-        skin.print_text(&issue.body);
+        if issue.body.trim().is_empty() {
+            println!("{}", "No description provided".dimmed());
+        } else {
+            skin.print_text(&issue.body);
+        }
     } else {
         // Collect issue list output
         let mut output = String::new();
@@ -576,7 +580,11 @@ fn list_pull_requests(
         
         // Render markdown body with termimad
         let skin = MadSkin::default();
-        skin.print_text(&issue.body);
+        if issue.body.trim().is_empty() {
+            println!("{}", "No description provided".dimmed());
+        } else {
+            skin.print_text(&issue.body);
+        }
     } else {
         // Collect pull request list output
         let mut output = String::new();
