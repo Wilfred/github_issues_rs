@@ -5,22 +5,23 @@ use clap::{Parser, Subcommand, ValueEnum};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::upsert::excluded;
-use models::{NewRepository, Repository, Issue, NewIssue, Label, NewLabel, IssueReaction, IssueLabel};
+use models::{
+    Issue, IssueLabel, IssueReaction, Label, NewIssue, NewLabel, NewRepository, Repository,
+};
+use serde::Deserialize;
 use std::error::Error;
-use serde::{Deserialize};
 
 use colored::Colorize;
-use terminal_link::Link;
-use termimad::MadSkin;
 use pager::Pager;
+use termimad::MadSkin;
+use terminal_link::Link;
 
 fn get_db_path() -> Result<String, Box<dyn Error>> {
-    let data_dir = dirs::data_dir()
-        .ok_or("Unable to determine data directory")?;
+    let data_dir = dirs::data_dir().ok_or("Unable to determine data directory")?;
     let app_dir = data_dir.join("gh-offline");
-    
+
     std::fs::create_dir_all(&app_dir)?;
-    
+
     let db_path = app_dir.join("repositories.db");
     Ok(format!("sqlite://{}", db_path.display()))
 }
@@ -151,7 +152,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     let db_path = get_db_path()?;
     let conn = SqliteConnection::establish(&db_path)
         .map_err(|e| format!("Error connecting to {}: {}", db_path, e))?;
-    
+
     // Create repositories table if it doesn't exist
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS repositories (
@@ -163,7 +164,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     )
     .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating repositories table: {}", e))?;
-    
+
     // Create issues table if it doesn't exist
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS issues (
@@ -181,12 +182,11 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     )
     .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating issues table: {}", e))?;
-    
+
     // Add author column if it doesn't exist
     let _ = diesel::sql_query("ALTER TABLE issues ADD COLUMN author TEXT")
         .execute(&mut SqliteConnection::establish(&db_path)?);
-    
-    
+
     // Create labels table if it doesn't exist
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS labels (
@@ -196,7 +196,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     )
     .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating labels table: {}", e))?;
-    
+
     // Create issue_labels table if it doesn't exist
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS issue_labels (
@@ -210,7 +210,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     )
     .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating issue_labels table: {}", e))?;
-    
+
     // Create issue_reactions table if it doesn't exist
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS issue_reactions (
@@ -224,7 +224,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     )
     .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating issue_reactions table: {}", e))?;
-    
+
     Ok(conn)
 }
 
@@ -234,65 +234,75 @@ fn insert_repository(user: &str, name: &str) -> Result<(), Box<dyn Error>> {
         user: user.to_string(),
         name: name.to_string(),
     };
-    
+
     diesel::insert_into(schema::repositories::table)
         .values(&new_repo)
         .execute(&mut conn)
         .map_err(|e| format!("Error inserting repository: {}", e))?;
-    
-    println!("Repository '{}' added successfully.", format!("{}/{}", user, name).cyan());
+
+    println!(
+        "Repository '{}' added successfully.",
+        format!("{}/{}", user, name).cyan()
+    );
     Ok(())
 }
 
 fn list_repositories() -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
-    
+
     let repos: Vec<Repository> = schema::repositories::table
         .order_by(schema::repositories::user.asc())
         .then_order_by(schema::repositories::name.asc())
         .load::<Repository>(&mut conn)
         .map_err(|e| format!("Error loading repositories: {}", e))?;
-    
+
     for repo in repos {
         println!("{}/{}", repo.user, repo.name);
     }
     Ok(())
 }
 
-fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter: TypeFilter) -> Result<(), Box<dyn Error>> {
+fn list_issues(
+    issue_number: Option<i32>,
+    state_filter: StateFilter,
+    type_filter: TypeFilter,
+) -> Result<(), Box<dyn Error>> {
     let mut conn = establish_connection()?;
-    
+
     // Check if filters are non-default
     let show_type = matches!(type_filter, TypeFilter::Pr | TypeFilter::All);
     let show_state = matches!(state_filter, StateFilter::Closed | StateFilter::All);
-    
+
     if let Some(number) = issue_number {
         // Display specific issue
         let issue = schema::issues::table
             .filter(schema::issues::number.eq(number))
             .first::<Issue>(&mut conn)
             .map_err(|e| format!("Issue #{} not found: {}", number, e))?;
-        
+
         // Get repository info
         let repository = schema::repositories::table
             .find(issue.repository_id)
             .first::<Repository>(&mut conn)
             .map_err(|e| format!("Repository not found: {}", e))?;
-        
+
         // Create hyperlinked title using OSC 8
-        let url = format!("https://github.com/{}/{}/issues/{}", repository.user, repository.name, issue.number);
+        let url = format!(
+            "https://github.com/{}/{}/issues/{}",
+            repository.user, repository.name, issue.number
+        );
         let title_display = format!("{}", issue.title.bold());
         let title_link = Link::new(&title_display, &url);
-        
+
         // Display title and author
         let mut first_line = format!("{}", title_link);
-        
+
         if let Some(author) = &issue.author {
             let author_url = format!("https://github.com/{}", author);
             let author_link = Link::new(author, &author_url);
             first_line.push_str(&format!(" {}", format!("by {}", author_link).dimmed()));
         }
-        
+
         // Add state and type badges
         let state_display = if issue.state == "open" {
             issue.state.to_uppercase().green().to_string()
@@ -300,20 +310,20 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
             issue.state.to_uppercase().red().to_string()
         };
         first_line.push_str(&format!(" {}", state_display));
-        
+
         if issue.is_pull_request {
             first_line.push_str(&format!(" {}", "PULL REQUEST".cyan()));
         }
-        
+
         println!("{}", first_line);
-        
+
         // Get and display labels immediately after title
         let issue_labels: Vec<(IssueLabel, Label)> = schema::issue_labels::table
             .inner_join(schema::labels::table)
             .filter(schema::issue_labels::issue_id.eq(issue.id))
             .load::<(IssueLabel, Label)>(&mut conn)
             .unwrap_or_default();
-        
+
         if !issue_labels.is_empty() {
             for (i, (_, label)) in issue_labels.iter().enumerate() {
                 if i > 0 {
@@ -323,82 +333,92 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
             }
             println!();
         }
-        
+
         // Get and display reactions
         let reactions: Vec<IssueReaction> = schema::issue_reactions::table
             .filter(schema::issue_reactions::issue_id.eq(issue.id))
             .order_by(schema::issue_reactions::reaction_type.asc())
             .load::<IssueReaction>(&mut conn)
             .unwrap_or_default();
-        
+
         if !reactions.is_empty() {
             for (i, reaction) in reactions.iter().enumerate() {
                 if i > 0 {
                     print!("\t");
                 }
-                print!("{} {}", reaction_to_ascii(&reaction.reaction_type), reaction.count.to_string().cyan());
+                print!(
+                    "{} {}",
+                    reaction_to_ascii(&reaction.reaction_type),
+                    reaction.count.to_string().cyan()
+                );
             }
             println!();
         }
-        
+
         println!();
-        
+
         // Render markdown body with termimad
         let skin = MadSkin::default();
         skin.print_text(&issue.body);
     } else {
         // Collect issue list output
         let mut output = String::new();
-        
+
         // List all issues grouped by repository
         let repositories: Vec<Repository> = schema::repositories::table
             .order_by(schema::repositories::user.asc())
             .then_order_by(schema::repositories::name.asc())
             .load::<Repository>(&mut conn)
             .map_err(|e| format!("Error loading repositories: {}", e))?;
-        
+
         for repo in repositories {
             let mut query = schema::issues::table
                 .filter(schema::issues::repository_id.eq(repo.id))
                 .order_by(schema::issues::number.desc())
                 .into_boxed();
-            
+
             // Filter by state
             if state_filter.as_str() != "all" {
                 query = query.filter(schema::issues::state.eq(state_filter.as_str()));
             }
-            
+
             // Filter by type
             match type_filter {
-                TypeFilter::Issue => query = query.filter(schema::issues::is_pull_request.eq(false)),
+                TypeFilter::Issue => {
+                    query = query.filter(schema::issues::is_pull_request.eq(false))
+                }
                 TypeFilter::Pr => query = query.filter(schema::issues::is_pull_request.eq(true)),
-                TypeFilter::All => {},
+                TypeFilter::All => {}
             }
-            
+
             let repo_issues: Vec<Issue> = query
                 .load::<Issue>(&mut conn)
                 .map_err(|e| format!("Error loading issues: {}", e))?;
-            
+
             if !repo_issues.is_empty() {
                 output.push('\n');
                 output.push_str(&format!("{}/{}\n", repo.user, repo.name));
-                
+
                 // Find the maximum issue number width for alignment
                 let max_number_width = repo_issues
                     .iter()
                     .map(|i| i.number.to_string().len())
                     .max()
                     .unwrap_or(1);
-                
+
                 for issue in repo_issues {
                     // Build hyperlink for issue number using OSC 8 with padding
-                    let url = format!("https://github.com/{}/{}/issues/{}", repo.user, repo.name, issue.number);
-                    let padded_number = format!("{:>width$}", issue.number, width = max_number_width);
+                    let url = format!(
+                        "https://github.com/{}/{}/issues/{}",
+                        repo.user, repo.name, issue.number
+                    );
+                    let padded_number =
+                        format!("{:>width$}", issue.number, width = max_number_width);
                     let issue_number_display = format!("#{}", padded_number);
                     let issue_number_link = Link::new(&issue_number_display, &url);
-                    
+
                     let mut metadata = String::new();
-                    
+
                     if show_type {
                         let issue_type = if issue.is_pull_request { "PR" } else { "ISSUE" };
                         if !metadata.is_empty() {
@@ -406,25 +426,30 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
                         }
                         metadata.push_str(issue_type);
                     }
-                    
+
                     if show_state {
                         if !metadata.is_empty() {
                             metadata.push(' ');
                         }
                         metadata.push_str(&issue.state.to_uppercase());
                     }
-                    
+
                     let date = issue.created_at.split('T').next().unwrap_or("");
                     if !metadata.is_empty() {
                         metadata.push(' ');
                     }
                     metadata.push_str(date);
-                    
-                    output.push_str(&format!("{} {} {}\n", issue_number_link, metadata.dimmed(), issue.title.bold()));
+
+                    output.push_str(&format!(
+                        "{} {} {}\n",
+                        issue_number_link,
+                        metadata.dimmed(),
+                        issue.title.bold()
+                    ));
                 }
             }
         }
-        
+
         // Use pager for output
         Pager::new().setup();
         print!("{}", output);
@@ -435,23 +460,23 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
 async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(), Box<dyn Error>> {
     let client = reqwest::Client::new();
     let mut conn = establish_connection()?;
-    
+
     // Get repository ID
     let repository: Repository = schema::repositories::table
         .filter(schema::repositories::user.eq(user))
         .filter(schema::repositories::name.eq(repo))
         .first::<Repository>(&mut conn)
         .map_err(|e| format!("Repository {}/{} not found: {}", user, repo, e))?;
-    
+
     let mut count = 0;
     let mut page = 1;
-    
+
     loop {
         let url = format!(
             "https://api.github.com/repos/{}/{}/issues?state=all&per_page=100&page={}",
             user, repo, page
         );
-        
+
         let response = client
             .get(&url)
             .header("Accept", "application/vnd.github+json")
@@ -460,17 +485,17 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             .header("User-Agent", "github_issues_rs")
             .send()
             .await?;
-        
+
         let body = response.text().await?;
         let github_issues: Vec<GitHubIssue> = serde_json::from_str(&body)
             .map_err(|e| format!("Error decoding response: {}. Response body: {}", e, body))?;
-        
+
         if github_issues.is_empty() {
             break;
         }
-        
+
         let page_count = github_issues.len();
-        
+
         for gh_issue in github_issues {
             let new_issue = NewIssue {
                 repository_id: repository.id,
@@ -482,7 +507,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                 is_pull_request: gh_issue.pull_request.is_some(),
                 author: gh_issue.user.map(|u| u.login),
             };
-            
+
             diesel::insert_into(schema::issues::table)
                 .values(&new_issue)
                 .on_conflict((schema::issues::repository_id, schema::issues::number))
@@ -494,42 +519,50 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                 ))
                 .execute(&mut conn)
                 .map_err(|e| format!("Error syncing issue: {}", e))?;
-            
+
             // Fetch the inserted/updated issue
             let issue_result = schema::issues::table
                 .filter(schema::issues::repository_id.eq(repository.id))
                 .filter(schema::issues::number.eq(gh_issue.number))
                 .first::<Issue>(&mut conn)
                 .map_err(|e| format!("Error fetching issue after insert: {}", e))?;
-            
+
             // Store labels
             if let Some(labels) = gh_issue.labels {
                 for label in labels {
                     let _ = diesel::insert_into(schema::labels::table)
-                        .values(NewLabel { name: label.name.clone() })
+                        .values(NewLabel {
+                            name: label.name.clone(),
+                        })
                         .on_conflict(schema::labels::name)
                         .do_nothing()
                         .execute(&mut conn);
-                    
+
                     let label_obj: Label = schema::labels::table
                         .filter(schema::labels::name.eq(&label.name))
                         .first::<Label>(&mut conn)
                         .ok()
-                        .unwrap_or_else(|| Label { id: 0, name: label.name.clone() });
-                    
+                        .unwrap_or_else(|| Label {
+                            id: 0,
+                            name: label.name.clone(),
+                        });
+
                     if label_obj.id > 0 {
                         let _ = diesel::insert_into(schema::issue_labels::table)
                             .values(models::NewIssueLabel {
                                 issue_id: issue_result.id,
                                 label_id: label_obj.id,
                             })
-                            .on_conflict((schema::issue_labels::issue_id, schema::issue_labels::label_id))
+                            .on_conflict((
+                                schema::issue_labels::issue_id,
+                                schema::issue_labels::label_id,
+                            ))
                             .do_nothing()
                             .execute(&mut conn);
                     }
                 }
             }
-            
+
             // Store reactions
             if let Some(reactions) = gh_issue.reactions {
                 let reactions_list = vec![
@@ -542,7 +575,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                     ("rocket", reactions.rocket),
                     ("eyes", reactions.eyes),
                 ];
-                
+
                 for (reaction_type, count) in reactions_list {
                     if let Some(cnt) = count {
                         if cnt > 0 {
@@ -552,7 +585,10 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                                     reaction_type: reaction_type.to_string(),
                                     count: cnt,
                                 })
-                                .on_conflict((schema::issue_reactions::issue_id, schema::issue_reactions::reaction_type))
+                                .on_conflict((
+                                    schema::issue_reactions::issue_id,
+                                    schema::issue_reactions::reaction_type,
+                                ))
                                 .do_update()
                                 .set(schema::issue_reactions::count.eq(cnt))
                                 .execute(&mut conn);
@@ -560,41 +596,47 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                     }
                 }
             }
-            
+
             count += 1;
         }
-        
+
         println!("  Page {}: {} issues (total: {}).", page, page_count, count);
         page += 1;
     }
-    
-    println!("Successfully synced {} issues from {}.", count, format!("{}/{}", user, repo).cyan());
+
+    println!(
+        "Successfully synced {} issues from {}.",
+        count,
+        format!("{}/{}", user, repo).cyan()
+    );
     Ok(())
 }
 
 #[tokio::main]
 async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
-    let token = std::env::var("GITHUB_TOKEN")
-        .map_err(|_| "GITHUB_TOKEN not found in .env file")?;
-    
+    let token = std::env::var("GITHUB_TOKEN").map_err(|_| "GITHUB_TOKEN not found in .env file")?;
+
     let mut conn = establish_connection()?;
-    
+
     let repos: Vec<Repository> = schema::repositories::table
         .load::<Repository>(&mut conn)
         .map_err(|e| format!("Error loading repositories: {}", e))?;
-    
+
     if repos.is_empty() {
-        println!("No repositories to sync. Add repositories with: {}.", "cargo run -- repo add username/projectname".yellow());
+        println!(
+            "No repositories to sync. Add repositories with: {}.",
+            "cargo run -- repo add username/projectname".yellow()
+        );
         return Ok(());
     }
-    
+
     for repo in repos {
         if let Err(e) = sync_issues_for_repo(&repo.user, &repo.name, &token).await {
             eprintln!("Error syncing {}/{}: {}", repo.user, repo.name, e);
         }
     }
-    
+
     Ok(())
 }
 
@@ -611,7 +653,11 @@ fn main() {
             RepoCommands::Add { repo } => {
                 let parts: Vec<&str> = repo.split('/').collect();
                 if parts.len() != 2 {
-                    eprintln!("{}: Repository must be in format {}.", "Error".red(), "username/projectname".yellow());
+                    eprintln!(
+                        "{}: Repository must be in format {}.",
+                        "Error".red(),
+                        "username/projectname".yellow()
+                    );
                 } else if let Err(e) = insert_repository(parts[0], parts[1]) {
                     eprintln!("{}: {}", "Error".red(), e);
                 }
@@ -622,7 +668,11 @@ fn main() {
                 }
             }
         },
-        Commands::Issue { number, state, r#type } => {
+        Commands::Issue {
+            number,
+            state,
+            r#type,
+        } => {
             if let Err(e) = list_issues(number, state, r#type) {
                 eprintln!("{}: {}", "Error".red(), e);
             }

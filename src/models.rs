@@ -1,5 +1,5 @@
+use crate::schema::{issue_labels, issue_reactions, issues, labels, repositories};
 use diesel::prelude::*;
-use crate::schema::{repositories, issues, labels, issue_labels, issue_reactions};
 
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = repositories)]
