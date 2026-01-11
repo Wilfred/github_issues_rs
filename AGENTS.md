@@ -14,7 +14,8 @@ gh-offline
 ├── repo          # Repository management (no subcommand = list)
 │   ├── add       # Add a new repository
 │   └── rm        # Remove a repository
-└── issue         # List all issues or view specific issue
+├── issue         # List all issues or view specific issue
+└── pr            # List all pull requests or view specific pull request
 ```
 
 ### Usage Examples
@@ -40,6 +41,15 @@ cargo run -- issue 123
 
 # List all issues with filters
 cargo run -- issue --state all --type all
+
+# List all pull requests (default: open only)
+cargo run -- pr
+
+# View a specific pull request
+cargo run -- pr 123
+
+# List all pull requests with filters
+cargo run -- pr --state all
 ```
 
 ## Code Structure
