@@ -2,19 +2,18 @@
 
 ## Project Overview
 
-github_issues_rs is a Rust CLI tool for managing GitHub repositories. It uses Diesel ORM for SQLite database access and Clap for command-line parsing.
+gh-offline is a Rust CLI tool for browsing cached GitHub issues offline. It syncs issues from repositories and stores them in a local SQLite database. It uses Diesel ORM for database access and Clap for command-line parsing.
 
 ## Command Structure
 
 The CLI uses nested subcommands organized by domain:
 
 ```
-github_issues_rs
+gh-offline
 ├── sync          # Sync issues from all repositories in database
-├── repo          # Repository management
-│   ├── add       # Add a new repository
-│   └── list      # List all repositories
-└── issue         # List all issues
+├── repo          # Repository management (no subcommand = list)
+│   └── add       # Add a new repository
+└── issue         # List all issues or view specific issue
 ```
 
 ### Usage Examples
@@ -24,29 +23,32 @@ github_issues_rs
 cargo run -- repo add torvalds/linux
 
 # List all repositories
-cargo run -- repo list
+cargo run -- repo
 
 # Sync issues from all repositories
 cargo run -- sync
 
-# List all issues
+# List all issues (default: open issues only)
 cargo run -- issue
 
 # View a specific issue
 cargo run -- issue 123
+
+# List all issues with filters
+cargo run -- issue --state all --type all
 ```
 
 ## Code Structure
 
 - `src/main.rs` - CLI entry point with command definitions and handlers
-- `src/models.rs` - Diesel model definitions (Repository, NewRepository)
+- `src/models.rs` - Diesel model definitions for database tables
 - `src/schema.rs` - Diesel schema table definitions
 
 ## Database
 
 - **Type**: SQLite
-- **Path**: `repositories.db` (ignored by git)
-- **Table**: `repositories` (id, user, name)
+- **Path**: `~/.local/share/gh-offline/repositories.db` (XDG_DATA_HOME spec)
+- **Tables**: `repositories`, `issues`, `labels`, `issue_labels`, `issue_reactions`
 
 ## Development
 
