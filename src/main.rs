@@ -295,7 +295,24 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         
         println!("{}", first_line);
         
-        // Get and display reactions immediately after title
+        // Get and display labels immediately after title
+        let issue_labels: Vec<(IssueLabel, Label)> = schema::issue_labels::table
+            .inner_join(schema::labels::table)
+            .filter(schema::issue_labels::issue_id.eq(issue.id))
+            .load::<(IssueLabel, Label)>(&mut conn)
+            .unwrap_or_default();
+        
+        if !issue_labels.is_empty() {
+            for (i, (_, label)) in issue_labels.iter().enumerate() {
+                if i > 0 {
+                    print!(" ");
+                }
+                print!("{}", label.name.cyan());
+            }
+            println!();
+        }
+        
+        // Get and display reactions
         let reactions: Vec<IssueReaction> = schema::issue_reactions::table
             .filter(schema::issue_reactions::issue_id.eq(issue.id))
             .order_by(schema::issue_reactions::reaction_type.asc())
@@ -313,27 +330,6 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         }
         
         println!();
-        
-        // Get and display labels
-        let issue_labels: Vec<(IssueLabel, Label)> = schema::issue_labels::table
-            .inner_join(schema::labels::table)
-            .filter(schema::issue_labels::issue_id.eq(issue.id))
-            .load::<(IssueLabel, Label)>(&mut conn)
-            .unwrap_or_default();
-        
-        if !issue_labels.is_empty() {
-            print!("{}: ", "Labels".cyan().bold());
-            for (i, (_, label)) in issue_labels.iter().enumerate() {
-                if i > 0 {
-                    print!(", ");
-                }
-                print!("{}", label.name);
-            }
-            println!();
-            println!();
-        } else if !reactions.is_empty() {
-            println!();
-        }
         
         // Render markdown body with termimad
         let skin = MadSkin::default();
