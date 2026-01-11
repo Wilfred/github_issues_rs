@@ -107,7 +107,7 @@ enum Commands {
     /// Repository management
     Repo {
         #[command(subcommand)]
-        command: RepoCommands,
+        command: Option<RepoCommands>,
     },
     /// List all issues, or view a specific issue
     Issue {
@@ -130,8 +130,6 @@ enum RepoCommands {
         /// Repository in format username/projectname
         repo: String,
     },
-    /// List all repositories
-    List,
 }
 
 fn reaction_to_ascii(reaction_type: &str) -> &str {
@@ -650,7 +648,7 @@ fn main() {
             }
         }
         Commands::Repo { command } => match command {
-            RepoCommands::Add { repo } => {
+            Some(RepoCommands::Add { repo }) => {
                 let parts: Vec<&str> = repo.split('/').collect();
                 if parts.len() != 2 {
                     eprintln!(
@@ -662,7 +660,7 @@ fn main() {
                     eprintln!("{}: {}", "Error".red(), e);
                 }
             }
-            RepoCommands::List => {
+            None => {
                 if let Err(e) = list_repositories() {
                     eprintln!("{}: {}", "Error".red(), e);
                 }
