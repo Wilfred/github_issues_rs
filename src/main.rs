@@ -276,7 +276,7 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         
         // Display title and author
         if let Some(author) = &issue.author {
-            println!("{} by {}", title_link, author.dimmed());
+            println!("{} {}", title_link, format!("by {}", author).dimmed());
         } else {
             println!("{}", title_link);
         }
