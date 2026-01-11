@@ -121,6 +121,15 @@ enum Commands {
         #[arg(short = 't', long, default_value = "issue")]
         r#type: TypeFilter,
     },
+    /// List all pull requests, or view a specific pull request
+    Pr {
+        /// Optional pull request number to view details
+        #[arg(value_name = "NUMBER")]
+        number: Option<i32>,
+        /// Filter by state: all, open, or closed
+        #[arg(short, long, default_value = "open")]
+        state: StateFilter,
+    },
 }
 
 #[derive(Subcommand)]
@@ -482,6 +491,170 @@ fn list_issues(
     Ok(())
 }
 
+fn list_pull_requests(
+    pr_number: Option<i32>,
+    state_filter: StateFilter,
+) -> Result<(), Box<dyn Error>> {
+    let mut conn = establish_connection()?;
+    
+    // Check if filters are non-default
+    let show_state = matches!(state_filter, StateFilter::Closed | StateFilter::All);
+    
+    if let Some(number) = pr_number {
+        // Display specific pull request
+        let issue = schema::issues::table
+            .filter(schema::issues::number.eq(number))
+            .filter(schema::issues::is_pull_request.eq(true))
+            .first::<Issue>(&mut conn)
+            .map_err(|e| format!("Pull request #{} not found: {}", number, e))?;
+        
+        // Get repository info
+        let repository = schema::repositories::table
+            .find(issue.repository_id)
+            .first::<Repository>(&mut conn)
+            .map_err(|e| format!("Repository not found: {}", e))?;
+        
+        // Create hyperlinked title using OSC 8
+        let url = format!("https://github.com/{}/{}/pull/{}", repository.user, repository.name, issue.number);
+        let title_display = format!("{}", issue.title.bold());
+        let title_link = Link::new(&title_display, &url);
+        
+        // Display title and author
+        let mut first_line = format!("{}", title_link);
+        
+        if let Some(author) = &issue.author {
+            let author_url = format!("https://github.com/{}", author);
+            let author_link = Link::new(author, &author_url);
+            first_line.push_str(&format!(" {}", format!("by {}", author_link).dimmed()));
+        }
+        
+        // Add state badge
+        let state_display = if issue.state == "open" {
+            issue.state.to_uppercase().green().to_string()
+        } else {
+            issue.state.to_uppercase().red().to_string()
+        };
+        first_line.push_str(&format!(" {}", state_display));
+        
+        println!("{}", first_line);
+        
+        // Get and display labels immediately after title
+        let issue_labels: Vec<(IssueLabel, Label)> = schema::issue_labels::table
+            .inner_join(schema::labels::table)
+            .filter(schema::issue_labels::issue_id.eq(issue.id))
+            .load::<(IssueLabel, Label)>(&mut conn)
+            .unwrap_or_default();
+        
+        if !issue_labels.is_empty() {
+            for (i, (_, label)) in issue_labels.iter().enumerate() {
+                if i > 0 {
+                    print!(" ");
+                }
+                print!("{}", label.name.cyan());
+            }
+            println!();
+        }
+        
+        // Get and display reactions
+        let reactions: Vec<IssueReaction> = schema::issue_reactions::table
+            .filter(schema::issue_reactions::issue_id.eq(issue.id))
+            .order_by(schema::issue_reactions::reaction_type.asc())
+            .load::<IssueReaction>(&mut conn)
+            .unwrap_or_default();
+        
+        if !reactions.is_empty() {
+            for (i, reaction) in reactions.iter().enumerate() {
+                if i > 0 {
+                    print!("\t");
+                }
+                print!("{} {}", reaction_to_ascii(&reaction.reaction_type), reaction.count.to_string().cyan());
+            }
+            println!();
+        }
+        
+        println!();
+        
+        // Render markdown body with termimad
+        let skin = MadSkin::default();
+        skin.print_text(&issue.body);
+    } else {
+        // Collect pull request list output
+        let mut output = String::new();
+        
+        // List all pull requests grouped by repository
+        let repositories: Vec<Repository> = schema::repositories::table
+            .order_by(schema::repositories::user.asc())
+            .then_order_by(schema::repositories::name.asc())
+            .load::<Repository>(&mut conn)
+            .map_err(|e| format!("Error loading repositories: {}", e))?;
+        
+        for repo in repositories {
+            let mut query = schema::issues::table
+                .filter(schema::issues::repository_id.eq(repo.id))
+                .filter(schema::issues::is_pull_request.eq(true))
+                .order_by(schema::issues::number.desc())
+                .into_boxed();
+            
+            // Filter by state
+            if state_filter.as_str() != "all" {
+                query = query.filter(schema::issues::state.eq(state_filter.as_str()));
+            }
+            
+            let repo_prs: Vec<Issue> = query
+                .load::<Issue>(&mut conn)
+                .map_err(|e| format!("Error loading pull requests: {}", e))?;
+            
+            if !repo_prs.is_empty() {
+                output.push('\n');
+                output.push_str(&format!("{}/{}\n", repo.user, repo.name));
+                
+                // Find the maximum issue number width for alignment
+                let max_number_width = repo_prs
+                    .iter()
+                    .map(|i| i.number.to_string().len())
+                    .max()
+                    .unwrap_or(1);
+                
+                for pr in repo_prs {
+                    // Build hyperlink for PR number using OSC 8 with padding
+                    let url = format!(
+                        "https://github.com/{}/{}/pull/{}",
+                        repo.user, repo.name, pr.number
+                    );
+                    let padded_number =
+                        format!("{:>width$}", pr.number, width = max_number_width);
+                    let pr_number_display = format!("#{}", padded_number);
+                    let pr_number_link = Link::new(&pr_number_display, &url);
+                    
+                    let mut metadata = String::new();
+                    
+                    if show_state {
+                        metadata.push_str(&pr.state.to_uppercase());
+                    }
+                    
+                    let date = pr.created_at.split('T').next().unwrap_or("");
+                    if !metadata.is_empty() {
+                        metadata.push(' ');
+                    }
+                    metadata.push_str(date);
+                    
+                    output.push_str(&format!(
+                        "{} {} {}\n",
+                        pr_number_link,
+                        metadata.dimmed(),
+                        pr.title.bold()
+                    ));
+                }
+            }
+        }
+        
+        // Use pager for output
+        Pager::new().setup();
+        print!("{}", output);
+    }
+    Ok(())
+}
+
 async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(), Box<dyn Error>> {
     let client = reqwest::Client::new();
     let mut conn = establish_connection()?;
@@ -711,6 +884,11 @@ fn main() {
             r#type,
         } => {
             if let Err(e) = list_issues(number, state, r#type) {
+                eprintln!("{}: {}", "Error".red(), e);
+            }
+        }
+        Commands::Pr { number, state } => {
+            if let Err(e) = list_pull_requests(number, state) {
                 eprintln!("{}: {}", "Error".red(), e);
             }
         }
