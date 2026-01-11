@@ -16,6 +16,7 @@ terminal-link = "0.1"
 termimad = "0.25"
 pager = "0.16"
 dirs = "5.0"
+chrono = "0.4"
 
 [dev-dependencies]
 

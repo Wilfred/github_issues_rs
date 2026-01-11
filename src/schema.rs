@@ -19,6 +19,7 @@ diesel::table! {
         state -> Text,
         is_pull_request -> Bool,
         author -> Nullable<Text>,
+        last_synced_at -> Nullable<Text>,
     }
 }
 
