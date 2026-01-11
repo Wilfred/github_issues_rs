@@ -12,7 +12,8 @@ The CLI uses nested subcommands organized by domain:
 gh-offline
 ├── sync          # Sync issues from all repositories in database
 ├── repo          # Repository management (no subcommand = list)
-│   └── add       # Add a new repository
+│   ├── add       # Add a new repository
+│   └── rm        # Remove a repository
 └── issue         # List all issues or view specific issue
 ```
 
@@ -24,6 +25,9 @@ cargo run -- repo add torvalds/linux
 
 # List all repositories
 cargo run -- repo
+
+# Remove a repository
+cargo run -- repo rm torvalds/linux
 
 # Sync issues from all repositories
 cargo run -- sync
