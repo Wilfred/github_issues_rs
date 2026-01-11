@@ -30,6 +30,7 @@ pub struct Issue {
     pub created_at: String,
     pub state: String,
     pub is_pull_request: bool,
+    pub author: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -42,6 +43,7 @@ pub struct NewIssue {
     pub created_at: String,
     pub state: String,
     pub is_pull_request: bool,
+    pub author: Option<String>,
 }
 
 #[derive(Queryable, Selectable, Debug)]

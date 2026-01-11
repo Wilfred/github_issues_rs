@@ -66,6 +66,11 @@ struct GitHubReactions {
 }
 
 #[derive(Deserialize)]
+struct GitHubUser {
+    login: String,
+}
+
+#[derive(Deserialize)]
 struct GitHubIssue {
     number: i32,
     title: String,
@@ -75,6 +80,7 @@ struct GitHubIssue {
     pull_request: Option<serde_json::Value>,
     labels: Option<Vec<GitHubLabel>>,
     reactions: Option<GitHubReactions>,
+    user: Option<GitHubUser>,
 }
 
 #[derive(Parser)]
@@ -159,11 +165,17 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             created_at TEXT NOT NULL,
             state TEXT NOT NULL,
             is_pull_request BOOLEAN NOT NULL DEFAULT 0,
+            author TEXT,
             UNIQUE(repository_id, number)
         )",
     )
     .execute(&mut SqliteConnection::establish(DB_PATH)?)
     .map_err(|e| format!("Error creating issues table: {}", e))?;
+    
+    // Add author column if it doesn't exist
+    let _ = diesel::sql_query("ALTER TABLE issues ADD COLUMN author TEXT")
+        .execute(&mut SqliteConnection::establish(DB_PATH)?);
+    
     
     // Create labels table if it doesn't exist
     diesel::sql_query(
@@ -261,7 +273,13 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         let url = format!("https://github.com/{}/{}/issues/{}", repository.user, repository.name, issue.number);
         let title_display = format!("{}", issue.title.bold());
         let title_link = Link::new(&title_display, &url);
-        println!("{}", title_link);
+        
+        // Display title and author
+        if let Some(author) = &issue.author {
+            println!("{} — {}", title_link, author.dimmed());
+        } else {
+            println!("{}", title_link);
+        }
         
         // Get and display reactions immediately after title
         let reactions: Vec<IssueReaction> = schema::issue_reactions::table
@@ -440,6 +458,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                 created_at: gh_issue.created_at,
                 state: gh_issue.state,
                 is_pull_request: gh_issue.pull_request.is_some(),
+                author: gh_issue.user.map(|u| u.login),
             };
             
             diesel::insert_into(schema::issues::table)

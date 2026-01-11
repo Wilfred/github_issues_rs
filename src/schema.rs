@@ -18,6 +18,7 @@ diesel::table! {
         created_at -> Text,
         state -> Text,
         is_pull_request -> Bool,
+        author -> Nullable<Text>,
     }
 }
 
