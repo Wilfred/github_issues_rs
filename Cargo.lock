@@ -537,7 +537,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ghi"
+name = "gh-offline"
 version = "0.1.0"
 dependencies = [
  "clap",
