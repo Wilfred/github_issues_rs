@@ -806,15 +806,18 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             count += 1;
         }
 
-        println!("  Page {}: {} issues (total: {}).", page, page_count, count);
+        // Print progress on the same line
+        print!(
+            "\r{}: {} issues",
+            format!("{}/{}", user, repo).cyan(),
+            count
+        );
+        std::io::Write::flush(&mut std::io::stdout())?;
+
         page += 1;
     }
 
-    println!(
-        "Successfully synced {} issues from {}.",
-        count,
-        format!("{}/{}", user, repo).cyan()
-    );
+    println!(); // Final newline after progress completes
     Ok(())
 }
 
