@@ -278,7 +278,9 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         let mut first_line = format!("{}", title_link);
         
         if let Some(author) = &issue.author {
-            first_line.push_str(&format!(" {}", format!("by {}", author).dimmed()));
+            let author_url = format!("https://github.com/{}", author);
+            let author_link = Link::new(author, &author_url);
+            first_line.push_str(&format!(" {}", format!("by {}", author_link).dimmed()));
         }
         
         // Add state and type badges
