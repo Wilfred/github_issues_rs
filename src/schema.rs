@@ -20,3 +20,39 @@ diesel::table! {
         is_pull_request -> Bool,
     }
 }
+
+diesel::table! {
+    labels (id) {
+        id -> Integer,
+        name -> Text,
+    }
+}
+
+diesel::table! {
+    issue_labels (id) {
+        id -> Integer,
+        issue_id -> Integer,
+        label_id -> Integer,
+    }
+}
+
+diesel::table! {
+    issue_reactions (id) {
+        id -> Integer,
+        issue_id -> Integer,
+        reaction_type -> Text,
+        count -> Integer,
+    }
+}
+
+diesel::joinable!(issue_labels -> issues (issue_id));
+diesel::joinable!(issue_labels -> labels (label_id));
+diesel::joinable!(issue_reactions -> issues (issue_id));
+
+diesel::allow_tables_to_appear_in_same_query!(
+    repositories,
+    issues,
+    labels,
+    issue_labels,
+    issue_reactions,
+);

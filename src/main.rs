@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::upsert::excluded;
-use models::{NewRepository, Repository, Issue, NewIssue};
+use models::{NewRepository, Repository, Issue, NewIssue, Label, NewLabel, IssueReaction, IssueLabel};
 use std::error::Error;
 use serde::{Deserialize};
 
@@ -46,6 +46,25 @@ enum TypeFilter {
 }
 
 #[derive(Deserialize)]
+struct GitHubLabel {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubReactions {
+    #[serde(rename = "+1")]
+    plus_one: Option<i32>,
+    #[serde(rename = "-1")]
+    minus_one: Option<i32>,
+    laugh: Option<i32>,
+    hooray: Option<i32>,
+    confused: Option<i32>,
+    heart: Option<i32>,
+    rocket: Option<i32>,
+    eyes: Option<i32>,
+}
+
+#[derive(Deserialize)]
 struct GitHubIssue {
     number: i32,
     title: String,
@@ -53,6 +72,8 @@ struct GitHubIssue {
     created_at: String,
     state: String,
     pull_request: Option<serde_json::Value>,
+    labels: Option<Vec<GitHubLabel>>,
+    reactions: Option<GitHubReactions>,
 }
 
 #[derive(Parser)]
@@ -96,6 +117,20 @@ enum RepoCommands {
     List,
 }
 
+fn reaction_to_ascii(reaction_type: &str) -> &str {
+    match reaction_type {
+        "+1" => "[+1]",
+        "-1" => "[-1]",
+        "laugh" => ":D",
+        "hooray" => "^_^",
+        "confused" => ":/",
+        "heart" => "<3",
+        "rocket" => "^^",
+        "eyes" => "o_o",
+        _ => "?",
+    }
+}
+
 fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     let conn = SqliteConnection::establish(DB_PATH)
         .map_err(|e| format!("Error connecting to {}: {}", DB_PATH, e))?;
@@ -128,6 +163,44 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
     )
     .execute(&mut SqliteConnection::establish(DB_PATH)?)
     .map_err(|e| format!("Error creating issues table: {}", e))?;
+    
+    // Create labels table if it doesn't exist
+    diesel::sql_query(
+        "CREATE TABLE IF NOT EXISTS labels (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+        )",
+    )
+    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .map_err(|e| format!("Error creating labels table: {}", e))?;
+    
+    // Create issue_labels table if it doesn't exist
+    diesel::sql_query(
+        "CREATE TABLE IF NOT EXISTS issue_labels (
+            id INTEGER PRIMARY KEY,
+            issue_id INTEGER NOT NULL,
+            label_id INTEGER NOT NULL,
+            UNIQUE(issue_id, label_id),
+            FOREIGN KEY(issue_id) REFERENCES issues(id),
+            FOREIGN KEY(label_id) REFERENCES labels(id)
+        )",
+    )
+    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .map_err(|e| format!("Error creating issue_labels table: {}", e))?;
+    
+    // Create issue_reactions table if it doesn't exist
+    diesel::sql_query(
+        "CREATE TABLE IF NOT EXISTS issue_reactions (
+            id INTEGER PRIMARY KEY,
+            issue_id INTEGER NOT NULL,
+            reaction_type TEXT NOT NULL,
+            count INTEGER NOT NULL,
+            UNIQUE(issue_id, reaction_type),
+            FOREIGN KEY(issue_id) REFERENCES issues(id)
+        )",
+    )
+    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .map_err(|e| format!("Error creating issue_reactions table: {}", e))?;
     
     Ok(conn)
 }
@@ -188,7 +261,46 @@ fn list_issues(issue_number: Option<i32>, state_filter: StateFilter, type_filter
         let title_display = format!("{}", issue.title.bold());
         let title_link = Link::new(&title_display, &url);
         println!("{}", title_link);
+        
+        // Get and display reactions immediately after title
+        let reactions: Vec<IssueReaction> = schema::issue_reactions::table
+            .filter(schema::issue_reactions::issue_id.eq(issue.id))
+            .order_by(schema::issue_reactions::reaction_type.asc())
+            .load::<IssueReaction>(&mut conn)
+            .unwrap_or_default();
+        
+        if !reactions.is_empty() {
+            for (i, reaction) in reactions.iter().enumerate() {
+                if i > 0 {
+                    print!("\t");
+                }
+                print!("{} {}", reaction_to_ascii(&reaction.reaction_type), reaction.count.to_string().cyan());
+            }
+            println!();
+        }
+        
         println!();
+        
+        // Get and display labels
+        let issue_labels: Vec<(IssueLabel, Label)> = schema::issue_labels::table
+            .inner_join(schema::labels::table)
+            .filter(schema::issue_labels::issue_id.eq(issue.id))
+            .load::<(IssueLabel, Label)>(&mut conn)
+            .unwrap_or_default();
+        
+        if !issue_labels.is_empty() {
+            print!("{}: ", "Labels".cyan().bold());
+            for (i, (_, label)) in issue_labels.iter().enumerate() {
+                if i > 0 {
+                    print!(", ");
+                }
+                print!("{}", label.name);
+            }
+            println!();
+            println!();
+        } else if !reactions.is_empty() {
+            println!();
+        }
         
         // Render markdown body with termimad
         let skin = MadSkin::default();
@@ -314,8 +426,8 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
             let new_issue = NewIssue {
                 repository_id: repository.id,
                 number: gh_issue.number,
-                title: gh_issue.title,
-                body: gh_issue.body.unwrap_or_default(),
+                title: gh_issue.title.clone(),
+                body: gh_issue.body.clone().unwrap_or_default(),
                 created_at: gh_issue.created_at,
                 state: gh_issue.state,
                 is_pull_request: gh_issue.pull_request.is_some(),
@@ -332,6 +444,73 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                 ))
                 .execute(&mut conn)
                 .map_err(|e| format!("Error syncing issue: {}", e))?;
+            
+            // Fetch the inserted/updated issue
+            let issue_result = schema::issues::table
+                .filter(schema::issues::repository_id.eq(repository.id))
+                .filter(schema::issues::number.eq(gh_issue.number))
+                .first::<Issue>(&mut conn)
+                .map_err(|e| format!("Error fetching issue after insert: {}", e))?;
+            
+            // Store labels
+            if let Some(labels) = gh_issue.labels {
+                for label in labels {
+                    let _ = diesel::insert_into(schema::labels::table)
+                        .values(NewLabel { name: label.name.clone() })
+                        .on_conflict(schema::labels::name)
+                        .do_nothing()
+                        .execute(&mut conn);
+                    
+                    let label_obj: Label = schema::labels::table
+                        .filter(schema::labels::name.eq(&label.name))
+                        .first::<Label>(&mut conn)
+                        .ok()
+                        .unwrap_or_else(|| Label { id: 0, name: label.name.clone() });
+                    
+                    if label_obj.id > 0 {
+                        let _ = diesel::insert_into(schema::issue_labels::table)
+                            .values(models::NewIssueLabel {
+                                issue_id: issue_result.id,
+                                label_id: label_obj.id,
+                            })
+                            .on_conflict((schema::issue_labels::issue_id, schema::issue_labels::label_id))
+                            .do_nothing()
+                            .execute(&mut conn);
+                    }
+                }
+            }
+            
+            // Store reactions
+            if let Some(reactions) = gh_issue.reactions {
+                let reactions_list = vec![
+                    ("+1", reactions.plus_one),
+                    ("-1", reactions.minus_one),
+                    ("laugh", reactions.laugh),
+                    ("hooray", reactions.hooray),
+                    ("confused", reactions.confused),
+                    ("heart", reactions.heart),
+                    ("rocket", reactions.rocket),
+                    ("eyes", reactions.eyes),
+                ];
+                
+                for (reaction_type, count) in reactions_list {
+                    if let Some(cnt) = count {
+                        if cnt > 0 {
+                            let _ = diesel::insert_into(schema::issue_reactions::table)
+                                .values(models::NewIssueReaction {
+                                    issue_id: issue_result.id,
+                                    reaction_type: reaction_type.to_string(),
+                                    count: cnt,
+                                })
+                                .on_conflict((schema::issue_reactions::issue_id, schema::issue_reactions::reaction_type))
+                                .do_update()
+                                .set(schema::issue_reactions::count.eq(cnt))
+                                .execute(&mut conn);
+                        }
+                    }
+                }
+            }
+            
             count += 1;
         }
         
