@@ -14,7 +14,16 @@ use terminal_link::Link;
 use termimad::MadSkin;
 use pager::Pager;
 
-const DB_PATH: &str = "sqlite://repositories.db";
+fn get_db_path() -> Result<String, Box<dyn Error>> {
+    let data_dir = dirs::data_dir()
+        .ok_or("Unable to determine data directory")?;
+    let app_dir = data_dir.join("gh-offline");
+    
+    std::fs::create_dir_all(&app_dir)?;
+    
+    let db_path = app_dir.join("repositories.db");
+    Ok(format!("sqlite://{}", db_path.display()))
+}
 
 #[derive(ValueEnum, Clone, Debug)]
 enum StateFilter {
@@ -139,8 +148,9 @@ fn reaction_to_ascii(reaction_type: &str) -> &str {
 }
 
 fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
-    let conn = SqliteConnection::establish(DB_PATH)
-        .map_err(|e| format!("Error connecting to {}: {}", DB_PATH, e))?;
+    let db_path = get_db_path()?;
+    let conn = SqliteConnection::establish(&db_path)
+        .map_err(|e| format!("Error connecting to {}: {}", db_path, e))?;
     
     // Create repositories table if it doesn't exist
     diesel::sql_query(
@@ -151,7 +161,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             UNIQUE(user, name)
         )",
     )
-    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating repositories table: {}", e))?;
     
     // Create issues table if it doesn't exist
@@ -169,12 +179,12 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             UNIQUE(repository_id, number)
         )",
     )
-    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating issues table: {}", e))?;
     
     // Add author column if it doesn't exist
     let _ = diesel::sql_query("ALTER TABLE issues ADD COLUMN author TEXT")
-        .execute(&mut SqliteConnection::establish(DB_PATH)?);
+        .execute(&mut SqliteConnection::establish(&db_path)?);
     
     
     // Create labels table if it doesn't exist
@@ -184,7 +194,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             name TEXT NOT NULL UNIQUE
         )",
     )
-    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating labels table: {}", e))?;
     
     // Create issue_labels table if it doesn't exist
@@ -198,7 +208,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             FOREIGN KEY(label_id) REFERENCES labels(id)
         )",
     )
-    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating issue_labels table: {}", e))?;
     
     // Create issue_reactions table if it doesn't exist
@@ -212,7 +222,7 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
             FOREIGN KEY(issue_id) REFERENCES issues(id)
         )",
     )
-    .execute(&mut SqliteConnection::establish(DB_PATH)?)
+    .execute(&mut SqliteConnection::establish(&db_path)?)
     .map_err(|e| format!("Error creating issue_reactions table: {}", e))?;
     
     Ok(conn)
