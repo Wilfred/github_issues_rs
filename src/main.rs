@@ -130,6 +130,11 @@ enum RepoCommands {
         /// Repository in format username/projectname
         repo: String,
     },
+    /// Remove a repository
+    Rm {
+        /// Repository in format username/projectname
+        repo: String,
+    },
 }
 
 fn reaction_to_ascii(reaction_type: &str) -> &str {
@@ -256,6 +261,28 @@ fn list_repositories() -> Result<(), Box<dyn Error>> {
 
     for repo in repos {
         println!("{}/{}", repo.user, repo.name);
+    }
+    Ok(())
+}
+
+fn remove_repository(user: &str, name: &str) -> Result<(), Box<dyn Error>> {
+    let mut conn = establish_connection()?;
+    
+    let deleted = diesel::delete(
+        schema::repositories::table
+            .filter(schema::repositories::user.eq(user))
+            .filter(schema::repositories::name.eq(name))
+    )
+    .execute(&mut conn)
+    .map_err(|e| format!("Error deleting repository: {}", e))?;
+    
+    if deleted == 0 {
+        eprintln!("Repository '{}/{}' not found.", user, name);
+    } else {
+        println!(
+            "Repository '{}' removed successfully.",
+            format!("{}/{}", user, name).cyan()
+        );
     }
     Ok(())
 }
@@ -657,6 +684,18 @@ fn main() {
                         "username/projectname".yellow()
                     );
                 } else if let Err(e) = insert_repository(parts[0], parts[1]) {
+                    eprintln!("{}: {}", "Error".red(), e);
+                }
+            }
+            Some(RepoCommands::Rm { repo }) => {
+                let parts: Vec<&str> = repo.split('/').collect();
+                if parts.len() != 2 {
+                    eprintln!(
+                        "{}: Repository must be in format {}.",
+                        "Error".red(),
+                        "username/projectname".yellow()
+                    );
+                } else if let Err(e) = remove_repository(parts[0], parts[1]) {
                     eprintln!("{}: {}", "Error".red(), e);
                 }
             }
