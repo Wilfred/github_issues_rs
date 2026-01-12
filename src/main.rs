@@ -103,7 +103,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Sync issues from all repositories in the database
-    Sync,
+    Sync {
+        /// Force fetch all issues, ignoring cache
+        #[arg(short, long)]
+        force: bool,
+    },
     /// Repository management
     Repo {
         #[command(subcommand)]
@@ -197,6 +201,10 @@ fn establish_connection() -> Result<SqliteConnection, Box<dyn Error>> {
 
     // Add author column if it doesn't exist
     let _ = diesel::sql_query("ALTER TABLE issues ADD COLUMN author TEXT")
+        .execute(&mut SqliteConnection::establish(&db_path)?);
+
+    // Add last_synced_at column if it doesn't exist
+    let _ = diesel::sql_query("ALTER TABLE issues ADD COLUMN last_synced_at TEXT")
         .execute(&mut SqliteConnection::establish(&db_path)?);
 
     // Create labels table if it doesn't exist
@@ -663,7 +671,10 @@ fn list_pull_requests(
     Ok(())
 }
 
-async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(), Box<dyn Error>> {
+async fn sync_issues_for_repo(user: &str, repo: &str, token: &str, force: bool) -> Result<(), Box<dyn Error>> {
+    use chrono::{DateTime, Utc};
+    use std::collections::HashMap;
+
     let client = reqwest::Client::new();
     let mut conn = establish_connection()?;
 
@@ -674,7 +685,19 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         .first::<Repository>(&mut conn)
         .map_err(|e| format!("Repository {}/{} not found: {}", user, repo, e))?;
 
+    // Load all existing issues for this repository into a HashMap for quick lookup
+    let existing_issues: Vec<Issue> = schema::issues::table
+        .filter(schema::issues::repository_id.eq(repository.id))
+        .load::<Issue>(&mut conn)
+        .map_err(|e| format!("Error loading existing issues: {}", e))?;
+
+    let mut issue_cache: HashMap<i32, Option<String>> = HashMap::new();
+    for issue in existing_issues {
+        issue_cache.insert(issue.number, issue.last_synced_at);
+    }
+
     let mut count = 0;
+    let mut skipped = 0;
     let mut page = 1;
 
     loop {
@@ -701,6 +724,45 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
         }
 
         for gh_issue in github_issues {
+            // Check if we should skip this issue based on cache
+            let should_sync = if !force {
+                if let Some(last_synced) = issue_cache.get(&gh_issue.number) {
+                    // Issue exists in database
+                    if let Some(last_synced_str) = last_synced {
+                        // Parse the last_synced_at timestamp
+                        if let Ok(last_sync_time) = DateTime::parse_from_rfc3339(last_synced_str) {
+                            let now = Utc::now();
+                            let duration = now.signed_duration_since(last_sync_time);
+
+                            // Skip if synced less than 10 minutes ago
+                            if duration.num_minutes() < 10 {
+                                skipped += 1;
+                                false
+                            } else {
+                                true
+                            }
+                        } else {
+                            // If we can't parse the timestamp, sync it
+                            true
+                        }
+                    } else {
+                        // last_synced_at is NULL, sync it
+                        true
+                    }
+                } else {
+                    // New issue, always sync
+                    true
+                }
+            } else {
+                // Force flag is true, sync everything
+                true
+            };
+
+            if !should_sync {
+                continue;
+            }
+
+            let current_time = Utc::now().to_rfc3339();
             let new_issue = NewIssue {
                 repository_id: repository.id,
                 number: gh_issue.number,
@@ -710,6 +772,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                 state: gh_issue.state,
                 is_pull_request: gh_issue.pull_request.is_some(),
                 author: gh_issue.user.map(|u| u.login),
+                last_synced_at: Some(current_time.clone()),
             };
 
             diesel::insert_into(schema::issues::table)
@@ -720,6 +783,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
                     schema::issues::title.eq(excluded(schema::issues::title)),
                     schema::issues::body.eq(excluded(schema::issues::body)),
                     schema::issues::state.eq(excluded(schema::issues::state)),
+                    schema::issues::last_synced_at.eq(excluded(schema::issues::last_synced_at)),
                 ))
                 .execute(&mut conn)
                 .map_err(|e| format!("Error syncing issue: {}", e))?;
@@ -806,9 +870,10 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
 
         // Print progress on the same line
         print!(
-            "\r{}: {} issues",
+            "\r{}: {} synced, {} skipped (cached)",
             format!("{}/{}", user, repo).cyan(),
-            count
+            count,
+            skipped
         );
         std::io::Write::flush(&mut std::io::stdout())?;
 
@@ -820,7 +885,7 @@ async fn sync_issues_for_repo(user: &str, repo: &str, token: &str) -> Result<(),
 }
 
 #[tokio::main]
-async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
+async fn sync_all_repos(force: bool) -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
     let token = std::env::var("GITHUB_TOKEN").map_err(|_| "GITHUB_TOKEN not found in .env file")?;
 
@@ -839,7 +904,7 @@ async fn sync_all_repos() -> Result<(), Box<dyn Error>> {
     }
 
     for repo in repos {
-        if let Err(e) = sync_issues_for_repo(&repo.user, &repo.name, &token).await {
+        if let Err(e) = sync_issues_for_repo(&repo.user, &repo.name, &token, force).await {
             eprintln!("Error syncing {}/{}: {}", repo.user, repo.name, e);
         }
     }
@@ -851,8 +916,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Sync => {
-            if let Err(e) = sync_all_repos() {
+        Commands::Sync { force } => {
+            if let Err(e) = sync_all_repos(force) {
                 eprintln!("{}: {}", "Error".red(), e);
             }
         }
